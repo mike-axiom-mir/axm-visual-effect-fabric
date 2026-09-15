@@ -1,0 +1,14 @@
+{
+  "name": "axm-visual-effect-fabric-standalone",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone AXM visual/procedural effect fabric built from the verified AetherFX runtime.",
+  "scripts": {
+    "verify": "npm --prefix runtime run verify",
+    "test": "npm --prefix runtime run test",
+    "start": "npm --prefix runtime run start",
+    "cli": "npm --prefix runtime run cli",
+    "inventory": "npm --prefix runtime run inventory"
+  },
+  "engines": { "node": ">=18" }
+}

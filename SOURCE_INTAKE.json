@@ -1,0 +1,16 @@
+{
+  "aggregate_manifest_sha256": "2fad97ee66604ae802a19f79d4f69b908f9675015bbe28b5a5a4bc015d5042d4",
+  "authority_change": false,
+  "canonical_import_mutated_by_verification": false,
+  "copied_bytes": 15153735,
+  "copied_entry_count": 169,
+  "copy_verified_byte_exact": true,
+  "platform_mutated": false,
+  "public_license_declared_by_this_intake": false,
+  "runtime_root": "runtime",
+  "schema": "axm.aetherfx-standalone-intake/v1",
+  "source_commit": "27757ace6133b243a200b0463e427c8b04d5a8e3",
+  "source_path": "tools/aetherfx/runtime",
+  "source_repository": "mike-axiom-mir/axm-collaboration-platform",
+  "target_repository": "mike-axiom-mir/axm-visual-effect-fabric"
+}
