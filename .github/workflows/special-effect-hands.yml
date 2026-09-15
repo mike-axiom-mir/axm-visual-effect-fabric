@@ -1,0 +1,31 @@
+name: Special-effect Hands proof
+
+on:
+  push:
+    branches:
+      - chatgpt/special-effect-hands-v0-1
+    paths:
+      - hand-lab/**
+      - .github/workflows/special-effect-hands.yml
+  pull_request:
+    paths:
+      - hand-lab/**
+      - .github/workflows/special-effect-hands.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run Hand tests
+        run: npm --prefix hand-lab test
+      - name: Run checkpoint-edit demo
+        run: npm --prefix hand-lab run demo
+      - name: Confirm imported AetherFX runtime was not changed by the proof
+        run: git diff --exit-code -- runtime
