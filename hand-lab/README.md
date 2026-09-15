@@ -1,59 +1,43 @@
-# Special-effect Hand lab v0.1
+# Special-effect Hand lab
 
-This is the bounded proof area for visual effects built as sequences of small caller-neutral executable Hands, with editable deterministic state preserved between every execution.
+This is the bounded proof area for visual effects built from caller-neutral executable Hands with editable deterministic state between stages.
 
-## What it proves
+## Existing proofs
 
-- one Hand performs one bounded transformation;
-- a composite Hand graph can execute many Hands in order;
-- every stage emits a hashed checkpoint containing editable state;
-- a human, AI, Mirror, or ordinary deterministic program can call the same graph;
-- caller identity does not change the effect result;
-- a caller can edit an intermediate checkpoint and replay only downstream Hands;
-- the original upstream checkpoint stays unchanged;
-- realization is derived from canonical effect state rather than replacing it;
-- core execution is offline and dependency-free.
+`fx.electric-storm` proves deterministic effect topology, checkpoint edits, downstream replay, and replaceable realization.
 
-## Electric storm proof
+`fx.holographic-panel-reveal` is retained as an earlier flat/interface-oriented experiment. It is useful as a checkpoint/orchestration proof, but it is **not** treated as the target holographic visual quality and is not a UC promotion candidate.
 
-`fx.electric-storm` runs eight Hands covering deterministic topology, branching, energy, glow/bloom, atmosphere, pulse and SVG realization.
+## Volumetric hologram projection v0.2
 
-The layer Hands reference existing AetherFX module identities without rewriting the imported AetherFX runtime. The SVG Hand is explicitly a preview adapter; canonical path topology, energy profile, layer intent, seed and controls remain editable.
+`fx.volumetric-hologram-projection` is the stronger hologram direction. It is deliberately not a transparent panel skin. Seven Hands build and preserve:
 
-## Holographic panel proof
+1. a real 3D projection volume with depth;
+2. projector/emitter cone and source ring intent;
+3. a deterministic 3D projection-mote cloud;
+4. scan planes moving through projection depth;
+5. depth-aware breakup bands;
+6. materialize / float / collapse motion envelopes;
+7. an animated WebGL2 realization.
 
-`fx.holographic-panel-reveal` is the first interface-oriented effect family. It runs nine Hands:
+The WebGL realization ray-marches a 3D rounded projection body and adds spatial parallax, moving volumetric scan behavior, projection light spill, rising motes, signal breakup, emissive edge/fresnel response, internal projected structure, and interactive materialize/collapse behavior. Pointer movement changes viewing parallax; click toggles the projection state.
 
-1. `fx.hologram.panel-form`
-2. `fx.hologram.depth-stack`
-3. `fx.hologram.scan-field`
-4. `fx.hologram.interference-field`
-5. `fx.hologram.emission-layers`
-6. `fx.hologram.semantic-state`
-7. `fx.hologram.motion-envelope`
-8. `fx.hologram.svg-preview`
-9. `fx.hologram.html-demo`
-
-The canonical body keeps panel geometry, depth slices, scanlines, interference fields, semantic state, material/light intent and normalized motion tracks editable. SVG and interactive HTML are derived realizations.
-
-The semantic states are deliberately useful to software instead of decoration-only: `dormant`, `materialize`, `stable`, `focus`, `alert` and `collapse`. The interactive browser proof starts quiet, materializes only when activated, can enter focus, and can collapse again. Reduced-motion preference is respected by the derived browser realization.
-
-A checkpoint edit after interference generation can change semantic state, glow scale or an individual interference band and replay only the remaining emission/state/motion/realization Hands.
+The canonical state stays separate from the renderer: volume dimensions, emitter settings, fields, particle state, motion, seed, tint, and accent remain editable and hashed. A checkpoint edit can change the projection geometry and replay only downstream breakup/motion/realization stages.
 
 ## Run
 
 ```sh
 npm --prefix hand-lab test
+npm --prefix hand-lab run demo:volumetric-hologram
 npm --prefix hand-lab run demo
-npm --prefix hand-lab run demo:hologram
 ```
 
-Generated evidence is written under `hand-lab/out/` and is derived evidence, not canonical source state. The hologram demo writes `hologram-panel.svg`, `hologram-panel.html`, and a canonical-state evidence JSON.
+Generated evidence lives under `hand-lab/out/` and is derived evidence rather than canonical source state.
 
 ## Port boundary
 
-The hologram family stays in Visual Effect Fabric while it is being proven. It is **not** copied into Universal Creation by this work. If the effect family becomes strong enough to reuse there, that should be a later explicit port with provenance and verification intact.
+Hologram work stays in Visual Effect Fabric while being proven. Nothing in this work is copied into Universal Creation. UC only receives an explicit later port if the effect is actually worth carrying.
 
-## Boundary
+## Truth boundary
 
-This lab does not declare the byte-pinned AetherFX runtime to be Hand-native, does not transfer authority, and does not turn a visual preview into a physics or quality claim. It proves deterministic orchestration, editable checkpoints, partial replay, caller-neutral invocation and replaceable realization.
+The Hand/runtime tests prove deterministic orchestration, caller-neutral state, depth-bearing canonical data, checkpoint replay, and animated WebGL source generation. They do not by themselves prove aesthetic quality on every GPU/browser. The byte-pinned AetherFX runtime remains separate and unchanged.
