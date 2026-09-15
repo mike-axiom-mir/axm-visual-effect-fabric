@@ -82,6 +82,20 @@ Points are therefore no longer the primary visible object. The density texture i
 
 This is deliberately described as **screen-space density reconstruction**, not a geometric mesh reconstruction. It does not claim true volumetric light transport, physical holography, semantic meshing, or topology recovery. The goal is the smallest real step from a readable particle sculpture toward an object that visually reads as one projected holographic body while preserving state-native performance and morph/state compatibility.
 
+## 3D voxel holographic surface v0.6
+
+`fx.holographic-voxel-surface` removes the remaining screen-space dependency from the main shape reconstruction path.
+
+The retained sample field is converted into a bounded 3D voxel density using deterministic max-splat kernels plus one neighbor-smoothing pass. A marching-tetrahedra Hand then extracts a real triangle shell from that derived density. The browser renders that retained triangle shell directly with normals, depth testing, touch/pointer parallax, Fresnel edge transmission, restrained interference, and sparse breakup.
+
+The state chain is:
+
+`canonical form -> sample field -> rebuildable voxel density -> rebuildable triangle shell -> disposable GPU triangle buffer`
+
+The voxel and triangle states are derived render state. They do not replace the canonical form. The default grid is 22³ and the extractor is bounded by a triangle ceiling so this path stays inspectable and suitable for ordinary-device tests rather than becoming another unbounded raymarch.
+
+Unlike v0.5, this path preserves a real 3D shell when the viewer moves around it. It is still an approximate surface derived from a sampled field, not semantic topology recovery or a source-authored mesh. The same graph is intended for the guide AI, strategy globe, rover, and explicit point-defined forms.
+
 ## Run
 
 ```sh
@@ -91,12 +105,15 @@ npm --prefix hand-lab run demo:holographic-ai:state-native
 npm --prefix hand-lab run demo:holographic-ai:raymarch
 npm --prefix hand-lab run demo:holographic-state-projector
 npm --prefix hand-lab run demo:holographic-state-surface
+npm --prefix hand-lab run demo:holographic-voxel-surface
 npm --prefix hand-lab run demo
 ```
 
 `demo:holographic-state-projector` writes a hub, three form realizations, and evidence under `hand-lab/out/`.
 
 `demo:holographic-state-surface` writes reconstructed-surface versions of the guide AI, strategy globe and rover plus a surface evidence report.
+
+`demo:holographic-voxel-surface` writes 3D triangle-shell versions of the same three forms plus voxel/mesh working-set evidence.
 
 Generated evidence is derived output rather than canonical source state.
 
@@ -106,4 +123,4 @@ The holographic projector stays in Visual Effect Fabric while being proven. It d
 
 ## Truth boundary
 
-Tests can prove deterministic orchestration, caller-neutral state, canonical-form hashing, derived sample-field generation, disposable density-field reconstruction contracts, one-renderer/many-form reuse, and generated renderer source. They do not prove arbitrary future geometry is already supported, identical aesthetic quality across every form, physical holography, or frame-time behavior on every browser/GPU. The byte-pinned AetherFX runtime remains separate and unchanged.
+Tests can prove deterministic orchestration, caller-neutral state, canonical-form hashing, derived sample-field generation, disposable screen-space density reconstruction, derived 3D voxel/triangle-shell contracts, one-renderer/many-form reuse, and generated renderer source. They do not prove arbitrary future geometry is already supported, identical aesthetic quality across every form, physical holography, semantic topology recovery, or frame-time behavior on every browser/GPU. The byte-pinned AetherFX runtime remains separate and unchanged.
