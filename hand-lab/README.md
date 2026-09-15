@@ -12,7 +12,7 @@ This is the bounded proof area for visual effects built from caller-neutral exec
 
 ## Finished bounded holographic AI package
 
-The holographic AI now has one canonical self-made procedural identity, `original-guide-01`, and three replaceable render expressions. The AI body/state is not owned by any one renderer.
+The holographic AI has one canonical self-made procedural identity, `original-guide-01`, and three replaceable render expressions. The AI body/state is not owned by any one renderer.
 
 ### 1. State-native default
 
@@ -30,11 +30,11 @@ Higher-cost ray-marched WebGL path. It remains available for stronger hardware, 
 
 `fx.holographic-ai-entity-calm`
 
-Low-cost animated SVG realization built from the same procedural anatomy. It keeps the emitter, head/body silhouette, raised hand, halo, eye/core glow, scan treatment, fragments, idle float, and pulse while requiring no WebGL.
+Low-cost animated SVG realization built from the same procedural anatomy. It keeps the emitter, head/body silhouette, raised hand, halo, eye/core glow, fragments, idle float, and pulse while requiring no WebGL.
 
 ### Semantic behavior contract
 
-Future software/games do not need bespoke animation code for every use. They can drive semantic events:
+Future software/games can drive semantic events instead of bespoke animation code:
 
 - `wake` -> `materialize`
 - `ready` -> `idle`
@@ -46,7 +46,27 @@ Future software/games do not need bespoke animation code for every use. They can
 - `settle` -> `idle`
 - `dismiss` -> `collapse`
 
-That makes the effect suitable later for things such as a faction intelligence appearing over an RTS command surface without making the RTS own a second hologram animation system.
+## Generic holographic state projector v0.1
+
+`fx.holographic-state-projector` moves the architecture underneath the AI into a generic form projector.
+
+The canonical form is truth. The holographic point/splat body is derived state that can be rebuilt or replaced. The projector itself does not know whether a form is an AI, planet, vehicle, UI object, or future game/world object.
+
+The bounded form contract currently supports `sphere` / `ellipsoid`, `capsule`, `torus`, and `box` primitives. A form is deterministically sampled into `axm.holographic-sample-field/v0.1`, then optional creative modulation (`rings`, `waves`, `grid`, `noise`) changes the derived projection expression without changing the canonical form meaning.
+
+The first proof runs the exact same Hand graph and WebGL point/splat renderer for three unrelated forms:
+
+- `guide-ai`
+- `strategy-globe`
+- `recon-rover`
+
+This combines three existing AXM directions without merging their authorities:
+
+- Collaboration Platform/Foundation-world style **canonical state -> disposable projection** semantics;
+- Universal Creation Creative Precision's **deterministic bounded creative primitives and compositional patterns**;
+- Render Fabric's **canonical state -> rebuildable working set -> state delta** rendering model.
+
+The projector intentionally contains no bright descending scan bar. Motion is limited to subtle float, parallax, shimmer, and bounded breakup.
 
 ## Run
 
@@ -55,17 +75,18 @@ npm --prefix hand-lab test
 npm --prefix hand-lab run demo:holographic-ai
 npm --prefix hand-lab run demo:holographic-ai:state-native
 npm --prefix hand-lab run demo:holographic-ai:raymarch
+npm --prefix hand-lab run demo:holographic-state-projector
 npm --prefix hand-lab run demo
 ```
 
-`demo:holographic-ai` writes a small package hub plus all three expressions under `hand-lab/out/`.
+`demo:holographic-state-projector` writes a hub, three form realizations, and evidence under `hand-lab/out/`.
 
 Generated evidence is derived output rather than canonical source state.
 
 ## Port boundary
 
-The finished bounded package stays in Visual Effect Fabric. Nothing in this finish pass is copied into Universal Creation. A later port should be explicit and preserve the renderer/state distinction rather than copying one rendered implementation as if it were the AI itself.
+The holographic projector stays in Visual Effect Fabric while being proven. It does not mutate the paused Collaboration Platform, Universal Creation, or Render Fabric. Future adapters may translate their canonical state into this projector contract without making this repository authoritative over those source systems.
 
 ## Truth boundary
 
-Tests can prove deterministic orchestration, caller-neutral state, identity continuity across render expressions, checkpoint replay, state-native working-set behavior, and generated renderer source. They do not prove identical aesthetic quality or frame time on every browser/GPU. The byte-pinned AetherFX runtime remains separate and unchanged.
+Tests can prove deterministic orchestration, caller-neutral state, canonical-form hashing, derived sample-field generation, one-renderer/many-form reuse, and generated renderer source. They do not prove arbitrary future geometry is already supported, identical aesthetic quality across every form, or frame-time behavior on every browser/GPU. The byte-pinned AetherFX runtime remains separate and unchanged.
