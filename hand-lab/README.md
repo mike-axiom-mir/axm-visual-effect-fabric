@@ -52,7 +52,7 @@ Future software/games can drive semantic events instead of bespoke animation cod
 
 The canonical form is truth. The holographic point/splat body is derived state that can be rebuilt or replaced. The projector itself does not know whether a form is an AI, planet, vehicle, UI object, or future game/world object.
 
-The bounded form contract currently supports `sphere` / `ellipsoid`, `capsule`, `torus`, and `box` primitives. A form is deterministically sampled into `axm.holographic-sample-field/v0.1`, then optional creative modulation (`rings`, `waves`, `grid`, `noise`) changes the derived projection expression without changing the canonical form meaning.
+The bounded form contract currently supports `sphere` / `ellipsoid`, `capsule`, `torus`, `box`, polyline, and explicit point samples. A form is deterministically sampled into `axm.holographic-sample-field/v0.1`, then optional creative modulation (`rings`, `waves`, `grid`, `noise`) changes the derived projection expression without changing canonical form meaning.
 
 The first proof runs the exact same Hand graph and WebGL point/splat renderer for three unrelated forms:
 
@@ -68,6 +68,20 @@ This combines three existing AXM directions without merging their authorities:
 
 The projector intentionally contains no bright descending scan bar. Motion is limited to subtle float, parallax, shimmer, and bounded breakup.
 
+## Reconstructed holographic surface v0.5
+
+`fx.holographic-state-surface` changes the visible body from direct point rendering into a reconstructed screen-space light surface.
+
+The existing deterministic sample field stays as internal state/render input. Each frame the state points are splatted into a disposable low-resolution RGBA8 density/depth/role field. A second fullscreen resolve pass samples that field, smooths local density, estimates screen-space gradients, and resolves one continuous translucent shell with internal light volume and edge transmission.
+
+The intended hierarchy is now:
+
+`canonical form -> sample field -> density/depth field -> reconstructed translucent shell -> restrained signal noise`
+
+Points are therefore no longer the primary visible object. The density texture is disposable GPU working data and can be rebuilt from the retained sample field. The first proof uses the same surface renderer for the guide AI, strategy globe, rover, and explicit point-defined forms.
+
+This is deliberately described as **screen-space density reconstruction**, not a geometric mesh reconstruction. It does not claim true volumetric light transport, physical holography, semantic meshing, or topology recovery. The goal is the smallest real step from a readable particle sculpture toward an object that visually reads as one projected holographic body while preserving state-native performance and morph/state compatibility.
+
 ## Run
 
 ```sh
@@ -76,10 +90,13 @@ npm --prefix hand-lab run demo:holographic-ai
 npm --prefix hand-lab run demo:holographic-ai:state-native
 npm --prefix hand-lab run demo:holographic-ai:raymarch
 npm --prefix hand-lab run demo:holographic-state-projector
+npm --prefix hand-lab run demo:holographic-state-surface
 npm --prefix hand-lab run demo
 ```
 
 `demo:holographic-state-projector` writes a hub, three form realizations, and evidence under `hand-lab/out/`.
+
+`demo:holographic-state-surface` writes reconstructed-surface versions of the guide AI, strategy globe and rover plus a surface evidence report.
 
 Generated evidence is derived output rather than canonical source state.
 
@@ -89,4 +106,4 @@ The holographic projector stays in Visual Effect Fabric while being proven. It d
 
 ## Truth boundary
 
-Tests can prove deterministic orchestration, caller-neutral state, canonical-form hashing, derived sample-field generation, one-renderer/many-form reuse, and generated renderer source. They do not prove arbitrary future geometry is already supported, identical aesthetic quality across every form, or frame-time behavior on every browser/GPU. The byte-pinned AetherFX runtime remains separate and unchanged.
+Tests can prove deterministic orchestration, caller-neutral state, canonical-form hashing, derived sample-field generation, disposable density-field reconstruction contracts, one-renderer/many-form reuse, and generated renderer source. They do not prove arbitrary future geometry is already supported, identical aesthetic quality across every form, physical holography, or frame-time behavior on every browser/GPU. The byte-pinned AetherFX runtime remains separate and unchanged.
