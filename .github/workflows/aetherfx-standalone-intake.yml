@@ -1,0 +1,183 @@
+name: AetherFX standalone intake
+
+on:
+  push:
+    branches:
+      - chatgpt/aetherfx-standalone-intake-v1.3
+    paths:
+      - .github/workflows/aetherfx-standalone-intake.yml
+
+permissions:
+  contents: write
+
+jobs:
+  intake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out standalone target
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out pinned read-only Platform source
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-collaboration-platform
+          ref: 67fd569b64971a55c378a9b25d378557f1454420
+          path: _source
+
+      - name: Copy exact AetherFX runtime body
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a _source/tools/aetherfx/runtime/ ./
+
+      - name: Verify source bytes survived the copy
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          source = Path('_source/tools/aetherfx/runtime')
+          target = Path('.')
+          files = sorted(p for p in source.rglob('*') if p.is_file())
+          total = 0
+          for src in files:
+              rel = src.relative_to(source)
+              dst = target / rel
+              if not dst.is_file():
+                  raise SystemExit(f'MISSING_COPY:{rel.as_posix()}')
+              a = src.read_bytes()
+              b = dst.read_bytes()
+              if a != b:
+                  raise SystemExit(f'BYTE_MISMATCH:{rel.as_posix()}')
+              total += len(a)
+          print(f'EXACT_RUNTIME_COPY files={len(files)} bytes={total}')
+          PY
+
+      - name: Run standalone source tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run validate
+
+      - name: Confirm verification did not rewrite imported source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('_source/tools/aetherfx/runtime')
+          target = Path('.')
+          for src in sorted(p for p in source.rglob('*') if p.is_file()):
+              rel = src.relative_to(source)
+              if src.read_bytes() != (target / rel).read_bytes():
+                  raise SystemExit(f'VERIFICATION_REWROTE_SOURCE:{rel.as_posix()}')
+          print('SOURCE_BYTES_STILL_EXACT')
+          PY
+
+      - name: Add standalone provenance and direction
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+
+          source = Path('_source/tools/aetherfx/runtime')
+          rows = []
+          total = 0
+          for src in sorted(p for p in source.rglob('*') if p.is_file()):
+              rel = src.relative_to(source).as_posix()
+              data = src.read_bytes()
+              total += len(data)
+              rows.append({'path': rel, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
+          aggregate = hashlib.sha256(''.join(
+              f"{r['path']}\0{r['bytes']}\0{r['sha256']}\n" for r in rows
+          ).encode()).hexdigest()
+          receipt = {
+              'schema': 'axm.aetherfx-standalone-intake/v1',
+              'source_repository': 'mike-axiom-mir/axm-collaboration-platform',
+              'source_commit': '67fd569b64971a55c378a9b25d378557f1454420',
+              'source_path': 'tools/aetherfx/runtime',
+              'source_tree_sha': '32c1ff178cb8275fc128e358230a8ced4c1cfe0d',
+              'copied_file_count': len(rows),
+              'copied_bytes': total,
+              'aggregate_manifest_sha256': aggregate,
+              'copy_verified_byte_exact': True,
+              'standalone_runtime_dependency_on_platform': False,
+              'platform_mutated': False,
+              'verification': ['npm test', 'npm run validate'],
+              'truth': 'Byte-exact copy and local test/validation evidence. Ownership/public licensing policy remains a separate declaration.'
+          }
+          Path('STANDALONE_INTAKE_RECEIPT.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+          PY
+
+          cat > README.md <<'EOF'
+          # AXM Visual Effect Fabric
+
+          Standalone home of **AXM AetherFX Visual Effect Fabric**.
+
+          The current body is a byte-exact intake of the existing AetherFX v1.3 runtime from the AXM Collaboration Platform at the pinned source recorded in `STANDALONE_INTAKE_RECEIPT.json`. The Platform was read only; this repository has no runtime dependency on it.
+
+          This is not a lightning-only project. Its working architecture is a reusable local-first effect machine:
+
+          `Primitives -> Effects -> Organs -> Molds -> Scenes -> Products`
+
+          Existing web/UI visual effects remain useful. Growth may add deeper procedural image effects, light and glow systems, path/energy effects, distortions, painterly/flow systems, organic/fractal growth, animation-driving fields, game/app adapters, 3D effect geometry and later bounded special-effects families where the implementation and evidence justify them.
+
+          Humans, AI systems and deterministic programs should call the same versioned modules and recipes. AI is an optional interpretation/orchestration layer, not the owner of the underlying capability.
+
+          Start with `START_HERE.md`. The browser studio is `OPEN_STUDIO.html`; the portable runtime is under `dist/runtime/`; the CLI is `tools/axmfx-cli.mjs`.
+
+          Public licensing is intentionally not inferred here. Source ownership/provenance and permission granted to third parties are separate questions.
+          EOF
+
+          cat > STANDALONE_DIRECTION.md <<'EOF'
+          # Standalone direction
+
+          ## Purpose
+
+          Grow AetherFX as a portable reusable effect-capability machine that can feed websites, apps, games, Universal Creation, editors and later hosts without being owned by any one host.
+
+          ## Preserve
+
+          - modular versioned capabilities and recipes;
+          - local/offline operation as the default;
+          - editable parameters and rich source;
+          - canonical intent/state separate from renderer-specific realization;
+          - provenance and explicit licensing fields;
+          - accessibility and performance controls;
+          - human, AI and deterministic-program parity;
+          - existing working web/interface effects.
+
+          ## Grow beyond interface skins
+
+          Candidate families include advanced procedural fields, serious electric arcs and branching paths, glow/bloom and guided light, distortions, painterly/LIC flow, fractal and organic growth, particles/trajectories, animated effect state, effect-driven geometry, game/native adapters and later special-effects mechanisms.
+
+          New families should be bounded capabilities with explicit inputs, outputs, seeds/state where relevant, resource ceilings and verifiable receipts. A slow render is not evidence of quality.
+
+          ## Relationship to Universal Creation
+
+          Universal Creation may implement and consume effect capabilities while remaining standalone. This repository is the deeper reusable effect laboratory/library; neither repository becomes a hidden runtime dependency of the other unless an explicit portable adapter is later chosen.
+
+          ## Relationship to AI Agent / shared Hands
+
+          Do not make reusable effect capability source depend on one AI identity or agent. An AI agent can discover, select and invoke the same contracts that ordinary software invokes. Repository location alone does not make a capability executable by every host; adapters/registries expose it.
+          EOF
+
+      - name: Commit standalone body
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _source
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Import exact AetherFX v1.3 runtime as standalone effect fabric"
+          git push origin HEAD:${GITHUB_REF_NAME}
