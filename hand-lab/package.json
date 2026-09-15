@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "demo": "node examples/electric-storm-demo.mjs",
+    "demo:electric": "node examples/electric-storm-demo.mjs",
+    "demo:hologram": "node examples/hologram-panel-demo.mjs",
+    "demo": "npm run demo:electric && npm run demo:hologram",
     "verify": "npm test && npm run demo"
   },
   "engines": {
