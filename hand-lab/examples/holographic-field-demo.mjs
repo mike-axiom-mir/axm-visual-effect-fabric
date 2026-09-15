@@ -1,0 +1,6 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { createHandRegistry, executeHandGraph } from '../src/hand-runtime.mjs';
+import { HOLOGRAPHIC_FIELD_EXAMPLES, HOLOGRAPHIC_FIELD_GRAPH, HOLOGRAPHIC_FIELD_HANDS, makeHolographicFieldInitialState } from '../src/holographic-field.mjs';
+const out=new URL('../out/',import.meta.url);await mkdir(out,{recursive:true});const registry=createHandRegistry(HOLOGRAPHIC_FIELD_HANDS),manifest={schema:'axm.holographic-field-demo/v0.1',renderer:'axm.vfx.state-native-holographic-field/v0.1',forms:{}};
+for(const[formId,primitives]of Object.entries(HOLOGRAPHIC_FIELD_EXAMPLES)){const run=executeHandGraph({registry,graph:HOLOGRAPHIC_FIELD_GRAPH,initialState:makeHolographicFieldInitialState({seed:20260915,formId,primitives}),context:{callerKind:'deterministic-program'}}),r=run.finalState.realizations.holographicFieldStateNative;await writeFile(new URL(`../out/holographic-field-${formId}.html`,import.meta.url),r.content);manifest.forms[formId]={finalStateHash:run.finalStateHash,fieldHash:run.finalState.field.cellHash,canonicalCellCount:r.workingSet.canonicalCellCount,modeledBufferBytes:r.workingSet.modeledBufferBytes}}
+await writeFile(new URL('../out/holographic-field-manifest.json',import.meta.url),JSON.stringify(manifest,null,2)+'\n');console.log(`HOLOGRAPHIC_FIELD_OK forms=${Object.keys(manifest.forms).length}`);
