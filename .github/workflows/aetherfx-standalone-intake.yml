@@ -1,0 +1,223 @@
+name: AetherFX standalone intake
+
+on:
+  push:
+    branches:
+      - chatgpt/aetherfx-standalone-intake
+    paths:
+      - .github/workflows/aetherfx-standalone-intake.yml
+
+permissions:
+  contents: write
+
+jobs:
+  intake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out standalone target
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out pinned Collaboration Platform source
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-collaboration-platform
+          ref: 27757ace6133b243a200b0463e427c8b04d5a8e3
+          path: _platform
+          persist-credentials: false
+
+      - name: Verify pinned source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C _platform rev-parse HEAD)" = "27757ace6133b243a200b0463e427c8b04d5a8e3"
+
+      - name: Materialize byte-exact AetherFX runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf runtime source-notes _verify-runtime
+          mkdir -p runtime source-notes
+          rsync -a _platform/tools/aetherfx/runtime/ runtime/
+          cp _platform/tools/aetherfx/README.md source-notes/PLATFORM_INTEGRATION_README.md
+          cp _platform/tools/aetherfx/WORKSHOP_INTAKE_RECEIPT.md source-notes/WORKSHOP_INTAKE_RECEIPT.md
+          cp _platform/tools/aetherfx/BROWSER_INTAKE_RECEIPT.md source-notes/BROWSER_INTAKE_RECEIPT.md
+          cp _platform/tools/aetherfx/UPSTREAM_SHA256SUMS.txt source-notes/UPSTREAM_SHA256SUMS.txt
+          cp _platform/tools/aetherfx/manifest.json source-notes/platform-tool-manifest.json
+          cp _platform/tools/aetherfx/service.contract.json source-notes/platform-service-contract.json
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+
+          src = Path('_platform/tools/aetherfx/runtime')
+          dst = Path('runtime')
+          rows = []
+          source_paths = sorted(src.rglob('*'), key=lambda p: p.relative_to(src).as_posix())
+          for a in source_paths:
+              rel = a.relative_to(src)
+              b = dst / rel
+              if a.is_symlink():
+                  if not b.is_symlink() or os.readlink(a) != os.readlink(b):
+                      raise SystemExit('SYMLINK_MISMATCH:' + rel.as_posix())
+                  target = os.readlink(a).encode()
+                  rows.append({'path': rel.as_posix(), 'kind': 'symlink', 'bytes': len(target), 'sha256': hashlib.sha256(target).hexdigest()})
+              elif a.is_file():
+                  if not b.is_file() or b.is_symlink():
+                      raise SystemExit('FILE_TYPE_MISMATCH:' + rel.as_posix())
+                  x, y = a.read_bytes(), b.read_bytes()
+                  if x != y:
+                      raise SystemExit('BYTE_MISMATCH:' + rel.as_posix())
+                  rows.append({'path': rel.as_posix(), 'kind': 'file', 'bytes': len(x), 'sha256': hashlib.sha256(x).hexdigest()})
+
+          agg = hashlib.sha256(''.join(f"{r['path']}\0{r['kind']}\0{r['bytes']}\0{r['sha256']}\n" for r in rows).encode()).hexdigest()
+          receipt = {
+              'schema': 'axm.aetherfx-standalone-intake/v1',
+              'source_repository': 'mike-axiom-mir/axm-collaboration-platform',
+              'source_commit': '27757ace6133b243a200b0463e427c8b04d5a8e3',
+              'source_path': 'tools/aetherfx/runtime',
+              'target_repository': 'mike-axiom-mir/axm-visual-effect-fabric',
+              'runtime_root': 'runtime',
+              'copied_entry_count': len(rows),
+              'copied_bytes': sum(r['bytes'] for r in rows),
+              'aggregate_manifest_sha256': agg,
+              'copy_verified_byte_exact': True,
+              'platform_mutated': False,
+              'canonical_import_mutated_by_verification': False,
+              'authority_change': False,
+              'public_license_declared_by_this_intake': False,
+          }
+          Path('SOURCE_INTAKE.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+
+      - name: Verify AetherFX on disposable copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a runtime _verify-runtime
+          (cd _verify-runtime && npm run verify)
+          rm -rf _verify-runtime
+
+      - name: Add standalone shell and growth direction
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > package.json <<'EOF'
+          {
+            "name": "axm-visual-effect-fabric-standalone",
+            "private": true,
+            "version": "0.1.0",
+            "description": "Standalone AXM visual/procedural effect fabric built from the verified AetherFX runtime.",
+            "scripts": {
+              "verify": "npm --prefix runtime run verify",
+              "test": "npm --prefix runtime run test",
+              "start": "npm --prefix runtime run start",
+              "cli": "npm --prefix runtime run cli",
+              "inventory": "npm --prefix runtime run inventory"
+            },
+            "engines": { "node": ">=18" }
+          }
+          EOF
+
+          cat > README.md <<'EOF'
+          # AXM Visual Effect Fabric
+
+          Standalone local-first visual/procedural effect machine. The initial body is the verified AXM AetherFX v1.3 runtime copied byte-for-byte from the pinned Collaboration Platform source recorded in `SOURCE_INTAKE.json`.
+
+          The Collaboration Platform is **not** a runtime dependency and was not modified. `runtime/` is the imported canonical source snapshot; root files are standalone integration and growth surfaces.
+
+          ## Run
+
+          ```sh
+          npm run verify
+          npm start
+          npm run cli -- --help
+          ```
+
+          `runtime/OPEN_STUDIO.html` remains the local creator UI. The portable runtime, CLI, module registry, recipes, snapshots and adapters can also be used without that UI.
+
+          ## Direction
+
+          This repository is broader than lighting. It exists to grow reusable procedural and special effects that can be called by humans, AI and deterministic programs and realized across websites, apps, games, image/video, animation and later 3D/spatial targets. See `GROWTH_DIRECTION.md`.
+
+          ## Truth / agency boundary
+
+          Importing source does not grant execution, publication, merge or CANON authority. Saved recipes and canonical effect state stay distinct from renderer-specific output. Public licensing of AXM-authored source is not inferred merely because this repository is public; retained third-party notices/licenses remain binding.
+          EOF
+
+          cat > GROWTH_DIRECTION.md <<'EOF'
+          # Visual Effect Fabric growth direction
+
+          The starting AetherFX body already follows `Primitives -> Effects -> Organs -> Molds -> Scenes -> Products`, with reusable modules, recipes, registry, validation, quality adaptation and renderer adapters.
+
+          Grow that body instead of rebuilding it.
+
+          ## Cross-surface rule
+
+          Prefer:
+
+          `editable recipe -> canonical procedural state/graph -> replaceable realizations`
+
+          A serious lightning effect, for example, should retain its branching/path state independently of whether it becomes SVG/CSS on a website, Canvas/WebGL in an app, particles/curves in a game, raster/video frames, or later 3D emissive geometry.
+
+          ## Research families to grow
+
+          1. field operators: turbulence/fBm, Worley/cellular fields, distance transforms, gradients and domain warping;
+          2. path/network effects: electrical arcs, cracks, roots, veins, rivers and guided trails;
+          3. light: bloom/glow, mask-guided rays and renderer-aware atmospheric/volumetric realizations;
+          4. organic/fractal growth: IFS, branching systems and bounded aggregation/growth;
+          5. flow/vector fields: LIC, brush/stroke direction, wind/water/smoke/particle guidance;
+          6. deformation: displacement, warp, breaks, waves, turbulence and controlled distortion;
+          7. painterly/stylized treatment: brush fields, stippling, halftone, graphic, comic and playful treatments while retaining realistic/product choices;
+          8. animation: deterministic parameter curves, flicker, propagation, growth, decay, looping and phase relationships;
+          9. geometry realization: curves, sweeps, instancing and mesh realization only when canonical effect state supports it;
+          10. later special-effects work: reusable effect graphs that can combine light, particles, materials, motion, audio cues and spatial state without pretending one renderer owns the source truth.
+
+          ## Requirements
+
+          - offline-first; no AI, account, cloud or paid service required for core execution;
+          - humans, AI and deterministic programs call the same underlying controls;
+          - preserve recipes, seeds, parameters, source state, provenance and known losses;
+          - renderer/host adapters may degrade expression but must not silently rewrite richer canonical effect truth;
+          - external/open-source algorithms require explicit provenance and license review before source reuse;
+          - slow rendering is never accepted as a quality claim;
+          - perceptual/aesthetic acceptance stays separate from structural execution evidence.
+          EOF
+
+          cat > LICENSE_STATUS.md <<'EOF'
+          # License status
+
+          The project owner states that the AXM/AetherFX source was created for the AXM project. This intake does not itself declare a public reuse license for AXM-authored source.
+
+          Third-party files and dependencies retain their own notices and licenses inside `runtime/` and the preserved source notes. Do not infer that public repository visibility means unrestricted reuse.
+          EOF
+
+      - name: Recheck canonical imported runtime after verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          src=Path('_platform/tools/aetherfx/runtime'); dst=Path('runtime')
+          for a in src.rglob('*'):
+              rel=a.relative_to(src); b=dst/rel
+              if a.is_symlink():
+                  assert b.is_symlink() and os.readlink(a)==os.readlink(b), rel
+              elif a.is_file():
+                  assert b.is_file() and not b.is_symlink() and a.read_bytes()==b.read_bytes(), rel
+          print('AETHERFX_CANONICAL_IMPORT_STILL_BYTE_EXACT')
+          PY
+
+      - name: Commit standalone verified body
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _platform _verify-runtime
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add runtime source-notes SOURCE_INTAKE.json README.md GROWTH_DIRECTION.md LICENSE_STATUS.md package.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Import verified standalone AetherFX runtime"
+          git push origin HEAD:${GITHUB_REF_NAME}
