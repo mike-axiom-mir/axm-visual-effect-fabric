@@ -45,11 +45,14 @@ test('one reconstructed surface renderer handles AI, globe, rover and explicit p
 
 test('browser realization reconstructs density into a shell instead of presenting points as the final body',()=>{
   const result=run(makeAiForm());
-  const html=result.finalState.realizations.holographicStateSurface.content;
+  const realization=result.finalState.realizations.holographicStateSurface;
+  const html=realization.content;
+  assert.equal(realization.reconstruction.input,'point-splat-density');
+  assert.equal(realization.reconstruction.resolve,'continuous translucent threshold shell');
+  assert.equal(realization.reconstruction.geometricMesh,false);
   assert.match(html,/createFramebuffer\(\)/);
   assert.match(html,/RGBA8/);
   assert.match(html,/framebufferTexture2D/);
-  assert.match(html,/screen-space density\/depth\/role/);
   assert.match(html,/g\.drawArrays\(g\.POINTS,0,/);
   assert.match(html,/g\.drawArrays\(g\.TRIANGLES,0,3\)/);
   assert.match(html,/smoothstep/);
