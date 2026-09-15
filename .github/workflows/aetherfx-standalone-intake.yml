@@ -19,12 +19,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check out pinned read-only Platform source
+      - name: Check out read-only Platform source
         uses: actions/checkout@v4
         with:
           repository: mike-axiom-mir/axm-collaboration-platform
-          ref: 67fd569b64971a55c378a9b25d378557f1454420
+          ref: main
           path: _source
+          persist-credentials: false
+
+      - name: Verify pinned Platform source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          observed="$(git -C _source rev-parse HEAD)"
+          expected="67fd569b64971a55c378a9b25d378557f1454420"
+          test "$observed" = "$expected" || { echo "SOURCE_MOVED expected=$expected observed=$observed"; exit 1; }
 
       - name: Copy exact AetherFX runtime body
         shell: bash
@@ -37,7 +46,6 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import hashlib
 
           source = Path('_source/tools/aetherfx/runtime')
           target = Path('.')
