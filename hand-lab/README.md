@@ -6,29 +6,36 @@ This is the bounded proof area for visual effects built from caller-neutral exec
 
 `fx.electric-storm` proves deterministic effect topology, checkpoint edits, downstream replay, and replaceable realization.
 
-`fx.holographic-panel-reveal` is retained as an earlier flat/interface-oriented experiment. It is useful as a checkpoint/orchestration proof, but it is **not** treated as the target holographic visual quality and is not a UC promotion candidate.
+`fx.holographic-panel-reveal` is retained as an earlier flat/interface-oriented experiment. It is not the target holographic quality, but it remains useful as a calmer UI effect, orchestration proof, and composable donor rather than being deleted.
 
-## Volumetric hologram projection v0.2
+`fx.volumetric-hologram-projection` is the stronger spatial hologram family. It preserves real projection depth, emitter/light-spill intent, projection motes, depth scan planes, signal breakup, parallax, materialize/float/collapse motion, and an animated WebGL2 realization. This is the current reusable spatial hologram base.
 
-`fx.volumetric-hologram-projection` is the stronger hologram direction. It is deliberately not a transparent panel skin. Seven Hands build and preserve:
+## Original holographic AI v0.1
 
-1. a real 3D projection volume with depth;
-2. projector/emitter cone and source ring intent;
-3. a deterministic 3D projection-mote cloud;
-4. scan planes moving through projection depth;
-5. depth-aware breakup bands;
-6. materialize / float / collapse motion envelopes;
-7. an animated WebGL2 realization.
+`fx.holographic-ai-entity` composes the volumetric projection Hands with a completely self-made procedural humanoid AI body. It is the same broad sci-fi category as a tiny projected assistant, but it does not copy an existing character model, mesh, image, or animation.
 
-The WebGL realization ray-marches a 3D rounded projection body and adds spatial parallax, moving volumetric scan behavior, projection light spill, rising motes, signal breakup, emissive edge/fresnel response, internal projected structure, and interactive materialize/collapse behavior. Pointer movement changes viewing parallax; click toggles the projection state.
+Nine stages build and preserve:
 
-The canonical state stays separate from the renderer: volume dimensions, emitter settings, fields, particle state, motion, seed, tint, and accent remain editable and hashed. A checkpoint edit can change the projection geometry and replay only downstream breakup/motion/realization stages.
+1. original humanoid anatomy with an asymmetric raised-hand silhouette;
+2. projector/emitter field;
+3. projection-mote cloud;
+4. scan planes through depth;
+5. depth-aware signal breakup;
+6. editable body-fragment/shard state;
+7. semantic AI behavior (`idle`, `listen`, `speak`, `think`, `alert` plus materialize/collapse profiles);
+8. projection motion envelopes;
+9. an animated ray-marched WebGL2 realization.
+
+The body itself is procedural geometry: head, torso, pelvis, limbs, hands, central light core, face/sensor glow, and a distinct halo structure. The realization adds idle float/yaw, raised-hand motion, voice/core pulse, projection breakup, scan waves, emitter light, particles, parallax, and interactive materialize/collapse behavior. No generated image is embedded in the effect.
+
+The weaker panel family and the stronger volumetric family remain available together so later effects can combine flat/interface treatments with spatial projection rather than losing earlier work.
 
 ## Run
 
 ```sh
 npm --prefix hand-lab test
 npm --prefix hand-lab run demo:volumetric-hologram
+npm --prefix hand-lab run demo:holographic-ai
 npm --prefix hand-lab run demo
 ```
 
@@ -36,8 +43,8 @@ Generated evidence lives under `hand-lab/out/` and is derived evidence rather th
 
 ## Port boundary
 
-Hologram work stays in Visual Effect Fabric while being proven. Nothing in this work is copied into Universal Creation. UC only receives an explicit later port if the effect is actually worth carrying.
+Hologram work stays in Visual Effect Fabric while being proven. Nothing in this work is copied into Universal Creation. UC only receives an explicit later port if an effect is actually worth carrying.
 
 ## Truth boundary
 
-The Hand/runtime tests prove deterministic orchestration, caller-neutral state, depth-bearing canonical data, checkpoint replay, and animated WebGL source generation. They do not by themselves prove aesthetic quality on every GPU/browser. The byte-pinned AetherFX runtime remains separate and unchanged.
+The Hand/runtime tests prove deterministic orchestration, caller-neutral state, procedural body/projection data, checkpoint replay, and animated WebGL source generation. They do not by themselves prove aesthetic quality on every GPU/browser. The byte-pinned AetherFX runtime remains separate and unchanged.
