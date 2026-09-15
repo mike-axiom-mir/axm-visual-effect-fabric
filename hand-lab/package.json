@@ -8,7 +8,8 @@
     "demo:electric": "node examples/electric-storm-demo.mjs",
     "demo:hologram": "node examples/hologram-panel-demo.mjs",
     "demo:volumetric-hologram": "node examples/volumetric-hologram-demo.mjs",
-    "demo": "npm run demo:electric && npm run demo:hologram && npm run demo:volumetric-hologram",
+    "demo:holographic-ai": "node examples/holographic-ai-demo.mjs",
+    "demo": "npm run demo:electric && npm run demo:hologram && npm run demo:volumetric-hologram && npm run demo:holographic-ai",
     "verify": "npm test && npm run demo"
   },
   "engines": {
