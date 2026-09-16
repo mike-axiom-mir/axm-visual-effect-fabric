@@ -36,6 +36,10 @@ function boundedInteger(value, min, max, label) {
   return number;
 }
 
+function normalizedCoordinate(value, label) {
+  return bounded(value, 0, 1, label);
+}
+
 function normalizeOffset(value) {
   if (!Array.isArray(value) || value.length < 2) throw new Error('fieldRequest.offset must be [x,y]');
   return [
@@ -86,8 +90,8 @@ export function sampleFbmSource(source, u, v) {
   if (!source || source.schema !== 'axm.scalar-field-source/v0.1') {
     throw new Error('sampleFbmSource requires normalized scalar field source');
   }
-  const x = finite(u, 'sample.u') * source.frequency + source.offset[0];
-  const y = finite(v, 'sample.v') * source.frequency + source.offset[1];
+  const x = normalizedCoordinate(u, 'sample.u') * source.frequency + source.offset[0];
+  const y = normalizedCoordinate(v, 'sample.v') * source.frequency + source.offset[1];
   let amplitude = 1;
   let frequencyScale = 1;
   let total = 0;
@@ -108,8 +112,8 @@ export function sampleScalarGrid(field, u, v) {
   if (!field || field.schema !== 'axm.scalar-field-grid/v0.1') {
     throw new Error('sampleScalarGrid requires scalar field grid');
   }
-  const x = clamp01(finite(u, 'sample.u')) * (field.width - 1);
-  const y = clamp01(finite(v, 'sample.v')) * (field.height - 1);
+  const x = normalizedCoordinate(u, 'sample.u') * (field.width - 1);
+  const y = normalizedCoordinate(v, 'sample.v') * (field.height - 1);
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);
   const x1 = Math.min(field.width - 1, x0 + 1);
@@ -124,12 +128,14 @@ export const normalizeScalarFieldRequestHand = hand('fx.field.fbm-source-normali
   const next = deepClone(state);
   const request = next.fieldRequest;
   if (!request || typeof request !== 'object') throw new Error('fBm field requires fieldRequest state');
+  const id = String(request.id ?? 'scalar-field').trim();
+  if (!id) throw new Error('fieldRequest.id must be non-empty');
 
   next.fieldSource = {
     schema: 'axm.scalar-field-source/v0.1',
-    id: String(request.id ?? 'scalar-field'),
+    id,
     algorithm: 'fbm-value-noise-2d',
-    seed: Math.trunc(bounded(request.seed ?? 1, 0, 4294967295, 'fieldRequest.seed')) >>> 0,
+    seed: boundedInteger(request.seed ?? 1, 0, 4294967295, 'fieldRequest.seed') >>> 0,
     frequency: round6(bounded(request.frequency ?? 3, 0.125, 64, 'fieldRequest.frequency')),
     octaves: boundedInteger(request.octaves ?? 4, 1, 8, 'fieldRequest.octaves'),
     lacunarity: round6(bounded(request.lacunarity ?? 2, 1, 4, 'fieldRequest.lacunarity')),
@@ -162,9 +168,9 @@ export const buildScalarFieldGridHand = hand('fx.field.fbm-grid-build', (state, 
   let max = -Infinity;
   let sum = 0;
   for (let y = 0; y < height; y += 1) {
-    const v = height === 1 ? 0 : y / (height - 1);
+    const v = y / (height - 1);
     for (let x = 0; x < width; x += 1) {
-      const u = width === 1 ? 0 : x / (width - 1);
+      const u = x / (width - 1);
       const value = sampleFbmSource(next.fieldSource, u, v);
       values.push(value);
       min = Math.min(min, value);
