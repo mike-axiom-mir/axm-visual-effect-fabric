@@ -159,13 +159,20 @@ test('one realization graph supports materially different directional and symmet
   assert.match(symmetric.realizations.transientImpulseModulatedStaticSvg.content, /<svg/);
 });
 
-test('renderer selection rejects broken modulated geometry lineage instead of silently rendering altered state', () => {
+test('renderer selection rejects broken modulated geometry or source lineage instead of silently rendering altered state', () => {
   const finalState = run(modulatedState()).finalState;
-  const changed = structuredClone(finalState);
-  changed.modulatedImpulseFields['render-modulation'].geometry.spokes[0].intensity += 0.1;
 
+  const changedGeometry = structuredClone(finalState);
+  changedGeometry.modulatedImpulseFields['render-modulation'].geometry.spokes[0].intensity += 0.1;
   assert.throws(
-    () => impulseModulatedStaticSvgHand.execute(changed, {}),
+    () => impulseModulatedStaticSvgHand.execute(changedGeometry, {}),
     /modulated impulse field geometry hash mismatch/,
+  );
+
+  const changedSource = structuredClone(finalState);
+  changedSource.fieldSources.a.seed += 1;
+  assert.throws(
+    () => impulseModulatedStaticSvgHand.execute(changedSource, {}),
+    /composition inputA source hash mismatch/,
   );
 });
