@@ -110,7 +110,7 @@ test('same adapter supports materially different directional and symmetric trans
   assert.notEqual(directional.eventCanonicalHash, symmetric.eventCanonicalHash);
   assert.notEqual(directional.impulseField.geometryHash, symmetric.impulseField.geometryHash);
   assert.notEqual(directionalResult.baseEnvelopeHash, symmetricResult.baseEnvelopeHash);
-  assert.equal(directionalResult.parameterCurveSource.keyframes, undefined);
+  assert.equal('parameterCurveSource' in directionalResult, false);
   assert.equal(directionalResult.samples.length, symmetricResult.samples.length);
 });
 
