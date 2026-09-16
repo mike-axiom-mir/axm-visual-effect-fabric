@@ -25,7 +25,7 @@ function stateFor({ operation = 'multiply', symmetry = 0.2, direction = [1, -0.1
     strength,
     floor,
     impulse: {
-      id: `${id}-impulse`,
+      id: 'shared-impulse',
       seed: 20260916,
       origin: [0.5, 0.5],
       direction,
@@ -40,10 +40,10 @@ function stateFor({ operation = 'multiply', symmetry = 0.2, direction = [1, -0.1
       },
     },
     composition: {
-      id: `${id}-composition`,
+      id: 'shared-composition',
       operation,
       a: {
-        id: `${id}-broad`,
+        id: 'shared-broad',
         seed: 771,
         frequency: 2.2,
         octaves: 4,
@@ -52,7 +52,7 @@ function stateFor({ operation = 'multiply', symmetry = 0.2, direction = [1, -0.1
         offset: [0.11, -0.19],
       },
       b: {
-        id: `${id}-detail`,
+        id: 'shared-detail',
         seed: 9021,
         frequency: 7.1,
         octaves: 3,
