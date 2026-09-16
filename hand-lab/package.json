@@ -1,7 +1,7 @@
 {
   "name": "axm-special-effect-hand-lab",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.12.0",
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
@@ -17,7 +17,8 @@
     "demo:holographic-state-surface": "node examples/holographic-state-surface-demo.mjs",
     "demo:holographic-voxel-surface": "node examples/holographic-state-voxel-surface-demo.mjs",
     "demo:holographic-voxel-refine": "node examples/holographic-state-voxel-refine-demo.mjs",
-    "demo": "npm run demo:electric && npm run demo:hologram && npm run demo:volumetric-hologram && npm run demo:holographic-ai:raymarch && npm run demo:holographic-ai:state-native && npm run demo:holographic-ai && npm run demo:holographic-state-projector && npm run demo:holographic-state-stream && npm run demo:holographic-state-shell && npm run demo:holographic-state-surface && npm run demo:holographic-voxel-surface && npm run demo:holographic-voxel-refine",
+    "demo:transient-impulse": "node examples/transient-impulse-demo.mjs",
+    "demo": "npm run demo:electric && npm run demo:hologram && npm run demo:volumetric-hologram && npm run demo:holographic-ai:raymarch && npm run demo:holographic-ai:state-native && npm run demo:holographic-ai && npm run demo:holographic-state-projector && npm run demo:holographic-state-stream && npm run demo:holographic-state-shell && npm run demo:holographic-state-surface && npm run demo:holographic-voxel-surface && npm run demo:holographic-voxel-refine && npm run demo:transient-impulse",
     "verify": "npm test && npm run demo"
   },
   "engines": {
