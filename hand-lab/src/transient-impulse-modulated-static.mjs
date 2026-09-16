@@ -29,6 +29,18 @@ function requireExactLineage(next, selected) {
   if (hashValue(selected.geometry) !== selected.geometryHash) {
     throw new Error('modulated impulse field geometry hash mismatch');
   }
+  if (hashValue(next.fieldCompositionSource) !== next.fieldCompositionSourceHash) {
+    throw new Error('field composition source hash mismatch');
+  }
+  if (hashValue(next.fieldSources?.a) !== next.fieldSourceHashes?.a) {
+    throw new Error('composition inputA source hash mismatch');
+  }
+  if (hashValue(next.fieldSources?.b) !== next.fieldSourceHashes?.b) {
+    throw new Error('composition inputB source hash mismatch');
+  }
+  if (hashValue(next.fieldModulationSource) !== next.fieldModulationSourceHash) {
+    throw new Error('field modulation source hash mismatch');
+  }
   if (selected.canonicalEventHash !== next.eventCanonicalHash) {
     throw new Error('modulated impulse canonical event lineage mismatch');
   }
