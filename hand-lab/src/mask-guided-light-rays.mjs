@@ -1,7 +1,9 @@
 import { deepClone, hashValue } from './hand-runtime.mjs';
 import { normalizeScalarFieldRequestHand } from './field-operators.mjs';
+import { normalizeCellularFieldRequestHand } from './cellular-field2d.mjs';
 import {
   makeCoverageMaskState,
+  makeCellularCoverageMaskState,
   normalizeCoverageMaskRequestHand,
   sampleCoverageSource,
 } from './field-mask-operators.mjs';
@@ -48,22 +50,42 @@ function normalizedTurns(value, label) {
   return round6(((turns % 1) + 1) % 1);
 }
 
-function validateBaseLineage(next) {
-  if (!next.fieldSource || !next.fieldSourceHash) {
-    throw new Error('mask-guided light rays require normalized scalar field source');
+function retainedScalarBindings(next) {
+  const bindings = [];
+  if (next.fieldSource && next.fieldSourceHash) {
+    bindings.push({ kind: 'fbm', source: next.fieldSource, hash: next.fieldSourceHash });
   }
+  if (next.cellularFieldSource && next.cellularFieldSourceHash) {
+    bindings.push({ kind: 'cellular', source: next.cellularFieldSource, hash: next.cellularFieldSourceHash });
+  }
+  return bindings;
+}
+
+function validateBaseLineage(next) {
   if (!next.coverageMaskSource || !next.coverageMaskSourceHash) {
     throw new Error('mask-guided light rays require normalized coverage mask source');
-  }
-  if (hashValue(next.fieldSource) !== next.fieldSourceHash) {
-    throw new Error('scalar field source state hash mismatch');
   }
   if (hashValue(next.coverageMaskSource) !== next.coverageMaskSourceHash) {
     throw new Error('coverage mask source state hash mismatch');
   }
-  if (next.coverageMaskSource.fieldSourceHash !== next.fieldSourceHash) {
-    throw new Error('coverage mask source field lineage mismatch');
+
+  const matches = retainedScalarBindings(next).filter((binding) => (
+    binding.hash === next.coverageMaskSource.fieldSourceHash
+    && binding.source?.id === next.coverageMaskSource.fieldId
+  ));
+  if (matches.length === 0) {
+    throw new Error('mask-guided light rays require the retained scalar source referenced by the coverage mask');
   }
+  if (matches.length > 1) throw new Error('mask-guided light ray scalar lineage is ambiguous');
+
+  const binding = matches[0];
+  if (hashValue(binding.source) !== binding.hash) {
+    throw new Error(`${binding.kind} scalar field source state hash mismatch`);
+  }
+
+  // sampleCoverageSource performs the shared scalar-schema/algorithm validation as well as lineage validation.
+  sampleCoverageSource(binding.source, next.coverageMaskSource, 0.5, 0.5);
+  return binding;
 }
 
 function maxDistanceInsideUnitSquare(origin, dx, dy) {
@@ -89,111 +111,7 @@ function raySetHashPayload(raySet) {
   };
 }
 
-function validateRaySet(next, raySet) {
-  validateBaseLineage(next);
-  if (!next.lightRaySource || !next.lightRaySourceHash) {
-    throw new Error('mask-guided light ray realization requires normalized ray source');
-  }
-  if (hashValue(next.lightRaySource) !== next.lightRaySourceHash) {
-    throw new Error('light ray source state hash mismatch');
-  }
-  if (!raySet || raySet.schema !== 'axm.mask-guided-light-ray-set/v0.1') {
-    throw new Error('mask-guided light ray realization requires a derived ray set');
-  }
-  if (raySet.raySourceHash !== next.lightRaySourceHash) {
-    throw new Error('light ray set source lineage mismatch');
-  }
-  if (raySet.fieldSourceHash !== next.fieldSourceHash || raySet.maskSourceHash !== next.coverageMaskSourceHash) {
-    throw new Error('light ray set field/mask lineage mismatch');
-  }
-  if (raySet.derived !== true || raySet.rebuildable !== true) {
-    throw new Error('light ray set must remain derived and rebuildable');
-  }
-  if (!Array.isArray(raySet.rays) || raySet.rays.length !== raySet.rayCount) {
-    throw new Error('light ray set cardinality mismatch');
-  }
-  if (hashValue(raySetHashPayload(raySet)) !== raySet.raySetHash) {
-    throw new Error('light ray set hash mismatch');
-  }
-
-  for (let index = 0; index < raySet.rays.length; index += 1) {
-    const ray = raySet.rays[index];
-    if (!ray || ray.index !== index || ray.id !== `${next.lightRaySource.id}:${index}`) {
-      throw new Error(`light ray ${index} identity mismatch`);
-    }
-    if (!Array.isArray(ray.start) || ray.start.length !== 2 || !Array.isArray(ray.end) || ray.end.length !== 2) {
-      throw new Error(`light ray ${index} endpoints must be 2D coordinates`);
-    }
-    for (const value of [...ray.start, ...ray.end]) bounded(value, 0, 1, `light ray ${index} coordinate`);
-    bounded(ray.weight, 0, 1, `light ray ${index}.weight`);
-    bounded(ray.coverageMean, 0, 1, `light ray ${index}.coverageMean`);
-    bounded(ray.coverageMin, 0, 1, `light ray ${index}.coverageMin`);
-    bounded(ray.coverageMax, 0, 1, `light ray ${index}.coverageMax`);
-    if (ray.coverageMin > ray.coverageMean || ray.coverageMean > ray.coverageMax) {
-      throw new Error(`light ray ${index} coverage statistics are inconsistent`);
-    }
-  }
-}
-
-export const normalizeMaskGuidedLightRaySourceHand = hand('fx.light.mask-guided-ray-source-normalize', (state) => {
-  const next = deepClone(state);
-  validateBaseLineage(next);
-  const request = next.lightRayRequest;
-  if (!request || typeof request !== 'object') throw new Error('mask-guided light rays require lightRayRequest state');
-
-  const id = String(request.id ?? 'mask-guided-light-rays').trim();
-  if (!id) throw new Error('lightRayRequest.id must be non-empty');
-  const origin = request.origin ?? [0.5, 0.5];
-  if (!Array.isArray(origin) || origin.length !== 2) throw new Error('lightRayRequest.origin must contain two coordinates');
-
-  next.lightRaySource = {
-    schema: 'axm.mask-guided-light-ray-source/v0.1',
-    id,
-    fieldSourceHash: next.fieldSourceHash,
-    maskSourceHash: next.coverageMaskSourceHash,
-    origin: [
-      round6(bounded(origin[0], 0, 1, 'lightRayRequest.origin[0]')),
-      round6(bounded(origin[1], 0, 1, 'lightRayRequest.origin[1]')),
-    ],
-    directionTurns: normalizedTurns(request.directionTurns ?? 0, 'lightRayRequest.directionTurns'),
-    spanTurns: round6(bounded(request.spanTurns ?? 0.25, 0, 1, 'lightRayRequest.spanTurns')),
-    maxLength: round6(bounded(request.maxLength ?? 1.25, 0.001, 2, 'lightRayRequest.maxLength')),
-    weightPower: round6(bounded(request.weightPower ?? 1, 0.25, 4, 'lightRayRequest.weightPower')),
-  };
-  next.lightRaySourceHash = hashValue(next.lightRaySource);
-
-  return {
-    state: next,
-    evidence: {
-      fieldSourceHash: next.fieldSourceHash,
-      maskSourceHash: next.coverageMaskSourceHash,
-      lightRaySourceHash: next.lightRaySourceHash,
-      origin: next.lightRaySource.origin,
-      directionTurns: next.lightRaySource.directionTurns,
-      spanTurns: next.lightRaySource.spanTurns,
-      maxLength: next.lightRaySource.maxLength,
-      weightPower: next.lightRaySource.weightPower,
-    },
-  };
-}, 'Normalize a consumer-neutral 2D light-ray source that references retained scalar-field and coverage-mask truth without choosing a renderer or working-set density.');
-
-export const buildMaskGuidedLightRaySetHand = hand('fx.light.mask-guided-ray-set-build', (state, params = {}) => {
-  const next = deepClone(state);
-  validateBaseLineage(next);
-  if (!next.lightRaySource || !next.lightRaySourceHash) throw new Error('mask-guided-ray-set-build requires normalized ray source');
-  if (hashValue(next.lightRaySource) !== next.lightRaySourceHash) throw new Error('light ray source state hash mismatch');
-  if (next.lightRaySource.fieldSourceHash !== next.fieldSourceHash || next.lightRaySource.maskSourceHash !== next.coverageMaskSourceHash) {
-    throw new Error('light ray source field/mask lineage mismatch');
-  }
-
-  const rayCount = boundedInteger(params.rayCount ?? 64, 1, 256, 'lightRaySet.rayCount');
-  const samplesPerRay = boundedInteger(params.samplesPerRay ?? 24, 2, 128, 'lightRaySet.samplesPerRay');
-  const maxRays = boundedInteger(params.maxRays ?? 256, 1, 256, 'lightRaySet.maxRays');
-  const maxSamples = boundedInteger(params.maxSamples ?? 32768, 2, 32768, 'lightRaySet.maxSamples');
-  if (rayCount > maxRays) throw new Error(`light ray count budget exceeded: ${rayCount} > ${maxRays}`);
-  const totalSamples = rayCount * samplesPerRay;
-  if (totalSamples > maxSamples) throw new Error(`light ray sample budget exceeded: ${totalSamples} > ${maxSamples}`);
-
+function deriveRaySet(next, binding, rayCount, samplesPerRay) {
   const source = next.lightRaySource;
   const rays = [];
   for (let index = 0; index < rayCount; index += 1) {
@@ -210,7 +128,7 @@ export const buildMaskGuidedLightRaySetHand = hand('fx.light.mask-guided-ray-set
       const distance = length * fraction;
       const u = Math.max(0, Math.min(1, source.origin[0] + dx * distance));
       const v = Math.max(0, Math.min(1, source.origin[1] + dy * distance));
-      coverage.push(sampleCoverageSource(next.fieldSource, next.coverageMaskSource, u, v));
+      coverage.push(sampleCoverageSource(binding.source, next.coverageMaskSource, u, v));
     }
 
     const coverageMean = round6(coverage.reduce((sum, value) => sum + value, 0) / coverage.length);
@@ -235,7 +153,7 @@ export const buildMaskGuidedLightRaySetHand = hand('fx.light.mask-guided-ray-set
   const raySet = {
     schema: 'axm.mask-guided-light-ray-set/v0.1',
     raySourceHash: next.lightRaySourceHash,
-    fieldSourceHash: next.fieldSourceHash,
+    fieldSourceHash: binding.hash,
     maskSourceHash: next.coverageMaskSourceHash,
     rayCount,
     samplesPerRay,
@@ -244,14 +162,133 @@ export const buildMaskGuidedLightRaySetHand = hand('fx.light.mask-guided-ray-set
     rebuildable: true,
   };
   raySet.raySetHash = hashValue(raySetHashPayload(raySet));
+  return raySet;
+}
 
-  next.lightRaySets ??= {};
-  next.lightRaySets[source.id] = raySet;
+function validateRaySet(next, raySet) {
+  const binding = validateBaseLineage(next);
+  if (!next.lightRaySource || !next.lightRaySourceHash) {
+    throw new Error('mask-guided light ray realization requires normalized ray source');
+  }
+  if (hashValue(next.lightRaySource) !== next.lightRaySourceHash) {
+    throw new Error('light ray source state hash mismatch');
+  }
+  if (!raySet || raySet.schema !== 'axm.mask-guided-light-ray-set/v0.1') {
+    throw new Error('mask-guided light ray realization requires a derived ray set');
+  }
+  if (raySet.raySourceHash !== next.lightRaySourceHash) {
+    throw new Error('light ray set source lineage mismatch');
+  }
+  if (raySet.fieldSourceHash !== binding.hash || raySet.maskSourceHash !== next.coverageMaskSourceHash) {
+    throw new Error('light ray set field/mask lineage mismatch');
+  }
+  if (raySet.derived !== true || raySet.rebuildable !== true) {
+    throw new Error('light ray set must remain derived and rebuildable');
+  }
+  const rayCount = boundedInteger(raySet.rayCount, 1, 256, 'lightRaySet.rayCount');
+  const samplesPerRay = boundedInteger(raySet.samplesPerRay, 2, 128, 'lightRaySet.samplesPerRay');
+  if (rayCount * samplesPerRay > 32768) throw new Error('light ray set exceeds hard sample ceiling');
+  if (!Array.isArray(raySet.rays) || raySet.rays.length !== rayCount) {
+    throw new Error('light ray set cardinality mismatch');
+  }
+  if (hashValue(raySetHashPayload(raySet)) !== raySet.raySetHash) {
+    throw new Error('light ray set hash mismatch');
+  }
+
+  for (let index = 0; index < raySet.rays.length; index += 1) {
+    const ray = raySet.rays[index];
+    if (!ray || ray.index !== index || ray.id !== `${next.lightRaySource.id}:${index}`) {
+      throw new Error(`light ray ${index} identity mismatch`);
+    }
+    if (!Array.isArray(ray.start) || ray.start.length !== 2 || !Array.isArray(ray.end) || ray.end.length !== 2) {
+      throw new Error(`light ray ${index} endpoints must be 2D coordinates`);
+    }
+    for (const value of [...ray.start, ...ray.end]) bounded(value, 0, 1, `light ray ${index} coordinate`);
+    bounded(ray.weight, 0, 1, `light ray ${index}.weight`);
+    bounded(ray.coverageMean, 0, 1, `light ray ${index}.coverageMean`);
+    bounded(ray.coverageMin, 0, 1, `light ray ${index}.coverageMin`);
+    bounded(ray.coverageMax, 0, 1, `light ray ${index}.coverageMax`);
+    if (ray.coverageMin > ray.coverageMean || ray.coverageMean > ray.coverageMax) {
+      throw new Error(`light ray ${index} coverage statistics are inconsistent`);
+    }
+  }
+
+  const rebuilt = deriveRaySet(next, binding, rayCount, samplesPerRay);
+  if (rebuilt.raySetHash !== raySet.raySetHash) {
+    throw new Error('light ray set does not rebuild from retained source truth');
+  }
+  return binding;
+}
+
+export const normalizeMaskGuidedLightRaySourceHand = hand('fx.light.mask-guided-ray-source-normalize', (state) => {
+  const next = deepClone(state);
+  const binding = validateBaseLineage(next);
+  const request = next.lightRayRequest;
+  if (!request || typeof request !== 'object') throw new Error('mask-guided light rays require lightRayRequest state');
+
+  const id = String(request.id ?? 'mask-guided-light-rays').trim();
+  if (!id) throw new Error('lightRayRequest.id must be non-empty');
+  const origin = request.origin ?? [0.5, 0.5];
+  if (!Array.isArray(origin) || origin.length !== 2) throw new Error('lightRayRequest.origin must contain two coordinates');
+
+  next.lightRaySource = {
+    schema: 'axm.mask-guided-light-ray-source/v0.1',
+    id,
+    fieldSourceHash: binding.hash,
+    maskSourceHash: next.coverageMaskSourceHash,
+    origin: [
+      round6(bounded(origin[0], 0, 1, 'lightRayRequest.origin[0]')),
+      round6(bounded(origin[1], 0, 1, 'lightRayRequest.origin[1]')),
+    ],
+    directionTurns: normalizedTurns(request.directionTurns ?? 0, 'lightRayRequest.directionTurns'),
+    spanTurns: round6(bounded(request.spanTurns ?? 0.25, 0, 1, 'lightRayRequest.spanTurns')),
+    maxLength: round6(bounded(request.maxLength ?? 1.25, 0.001, 2, 'lightRayRequest.maxLength')),
+    weightPower: round6(bounded(request.weightPower ?? 1, 0.25, 4, 'lightRayRequest.weightPower')),
+  };
+  next.lightRaySourceHash = hashValue(next.lightRaySource);
 
   return {
     state: next,
     evidence: {
-      fieldSourceHash: next.fieldSourceHash,
+      fieldSourceKind: binding.kind,
+      fieldSourceHash: binding.hash,
+      maskSourceHash: next.coverageMaskSourceHash,
+      lightRaySourceHash: next.lightRaySourceHash,
+      origin: next.lightRaySource.origin,
+      directionTurns: next.lightRaySource.directionTurns,
+      spanTurns: next.lightRaySource.spanTurns,
+      maxLength: next.lightRaySource.maxLength,
+      weightPower: next.lightRaySource.weightPower,
+    },
+  };
+}, 'Normalize a consumer-neutral 2D light-ray source that references retained supported scalar-field and coverage-mask truth without choosing a renderer or working-set density.');
+
+export const buildMaskGuidedLightRaySetHand = hand('fx.light.mask-guided-ray-set-build', (state, params = {}) => {
+  const next = deepClone(state);
+  const binding = validateBaseLineage(next);
+  if (!next.lightRaySource || !next.lightRaySourceHash) throw new Error('mask-guided-ray-set-build requires normalized ray source');
+  if (hashValue(next.lightRaySource) !== next.lightRaySourceHash) throw new Error('light ray source state hash mismatch');
+  if (next.lightRaySource.fieldSourceHash !== binding.hash || next.lightRaySource.maskSourceHash !== next.coverageMaskSourceHash) {
+    throw new Error('light ray source field/mask lineage mismatch');
+  }
+
+  const rayCount = boundedInteger(params.rayCount ?? 64, 1, 256, 'lightRaySet.rayCount');
+  const samplesPerRay = boundedInteger(params.samplesPerRay ?? 24, 2, 128, 'lightRaySet.samplesPerRay');
+  const maxRays = boundedInteger(params.maxRays ?? 256, 1, 256, 'lightRaySet.maxRays');
+  const maxSamples = boundedInteger(params.maxSamples ?? 32768, 2, 32768, 'lightRaySet.maxSamples');
+  if (rayCount > maxRays) throw new Error(`light ray count budget exceeded: ${rayCount} > ${maxRays}`);
+  const totalSamples = rayCount * samplesPerRay;
+  if (totalSamples > maxSamples) throw new Error(`light ray sample budget exceeded: ${totalSamples} > ${maxSamples}`);
+
+  const raySet = deriveRaySet(next, binding, rayCount, samplesPerRay);
+  next.lightRaySets ??= {};
+  next.lightRaySets[next.lightRaySource.id] = raySet;
+
+  return {
+    state: next,
+    evidence: {
+      fieldSourceKind: binding.kind,
+      fieldSourceHash: binding.hash,
       maskSourceHash: next.coverageMaskSourceHash,
       lightRaySourceHash: next.lightRaySourceHash,
       raySetHash: raySet.raySetHash,
@@ -263,13 +300,13 @@ export const buildMaskGuidedLightRaySetHand = hand('fx.light.mask-guided-ray-set
       performanceMeasurement: 'NOT_TESTED',
     },
   };
-}, 'Build a bounded rebuildable 2D ray working set whose renderer-neutral weights are derived from retained coverage-mask samples.');
+}, 'Build a bounded rebuildable 2D ray working set whose renderer-neutral weights are derived from retained supported coverage-mask samples.');
 
 export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guided-rays-static-svg-realize', (state, params = {}) => {
   const next = deepClone(state);
   if (!next.lightRaySource || !next.lightRaySourceHash) throw new Error('mask-guided-rays-static-svg-realize requires normalized ray source');
   const raySet = next.lightRaySets?.[next.lightRaySource.id];
-  validateRaySet(next, raySet);
+  const binding = validateRaySet(next, raySet);
 
   const width = boundedInteger(params.width ?? 640, 16, 4096, 'lightRaySvg.width');
   const height = boundedInteger(params.height ?? 420, 16, 4096, 'lightRaySvg.height');
@@ -295,7 +332,7 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
     renderer: 'axm.vfx.mask-guided-light-rays-static-svg/v0.1',
     raySourceHash: next.lightRaySourceHash,
     raySetHash: raySet.raySetHash,
-    fieldSourceHash: next.fieldSourceHash,
+    fieldSourceHash: binding.hash,
     maskSourceHash: next.coverageMaskSourceHash,
     derivedFromStateHash: hashValue({
       lightRaySourceHash: next.lightRaySourceHash,
@@ -312,6 +349,7 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
   return {
     state: next,
     evidence: {
+      fieldSourceKind: binding.kind,
       renderer: realization.renderer,
       raySourceHash: realization.raySourceHash,
       raySetHash: realization.raySetHash,
@@ -336,6 +374,14 @@ export const MASK_GUIDED_LIGHT_RAY_HANDS = [
   realizeMaskGuidedLightRaysStaticSvgHand,
 ];
 
+export const CELLULAR_MASK_GUIDED_LIGHT_RAY_HANDS = [
+  normalizeCellularFieldRequestHand,
+  normalizeCoverageMaskRequestHand,
+  normalizeMaskGuidedLightRaySourceHand,
+  buildMaskGuidedLightRaySetHand,
+  realizeMaskGuidedLightRaysStaticSvgHand,
+];
+
 export const MASK_GUIDED_LIGHT_RAY_GRAPH = Object.freeze({
   schema: 'axm.hand-graph/v0.1',
   id: 'fx.light.mask-guided-rays2d-static-svg',
@@ -349,8 +395,39 @@ export const MASK_GUIDED_LIGHT_RAY_GRAPH = Object.freeze({
   ],
 });
 
+export const CELLULAR_MASK_GUIDED_LIGHT_RAY_GRAPH = Object.freeze({
+  schema: 'axm.hand-graph/v0.1',
+  id: 'fx.light.mask-guided-rays2d-static-svg-cellular',
+  version: '0.1.0',
+  stages: [
+    { id: 'normalize-cellular-source', hand: 'fx.field.cellular-source-normalize', params: {} },
+    { id: 'normalize-coverage-mask-source', hand: 'fx.field.coverage-mask-source-normalize', params: {} },
+    { id: 'normalize-light-ray-source', hand: 'fx.light.mask-guided-ray-source-normalize', params: {} },
+    { id: 'build-light-ray-set', hand: 'fx.light.mask-guided-ray-set-build', params: { rayCount: 64, samplesPerRay: 24, maxRays: 256, maxSamples: 32768 } },
+    { id: 'realize-static-svg', hand: 'fx.light.mask-guided-rays-static-svg-realize', params: { width: 640, height: 420, strokeWidth: 1.5, minOpacity: 0, maxOpacity: 0.85 } },
+  ],
+});
+
 export function makeMaskGuidedLightRayState(options = {}) {
   const base = makeCoverageMaskState({ field: options.field ?? {}, mask: options.mask ?? {} });
+  const ray = options.ray ?? {};
+  return {
+    ...base,
+    lightRayRequest: {
+      id: ray.id ?? 'mask-guided-light-rays',
+      origin: deepClone(ray.origin ?? [0.5, 0.5]),
+      directionTurns: ray.directionTurns ?? 0,
+      spanTurns: ray.spanTurns ?? 0.25,
+      maxLength: ray.maxLength ?? 1.25,
+      weightPower: ray.weightPower ?? 1,
+    },
+    lightRaySets: {},
+    realizations: {},
+  };
+}
+
+export function makeCellularMaskGuidedLightRayState(options = {}) {
+  const base = makeCellularCoverageMaskState({ field: options.field ?? {}, mask: options.mask ?? {} });
   const ray = options.ray ?? {};
   return {
     ...base,
