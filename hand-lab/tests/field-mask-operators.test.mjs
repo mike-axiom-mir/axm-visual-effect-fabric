@@ -1,16 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHandRegistry, executeHandGraph } from '../src/hand-runtime.mjs';
+import { createHandRegistry, executeHandGraph, hashValue } from '../src/hand-runtime.mjs';
 import {
+  CELLULAR_COVERAGE_MASK_GRAPH,
+  CELLULAR_COVERAGE_MASK_HANDS,
   COVERAGE_MASK_GRAPH,
   COVERAGE_MASK_HANDS,
   coverageFromScalar,
+  makeCellularCoverageMaskState,
   makeCoverageMaskState,
+  normalizeCoverageMaskRequestHand,
   sampleCoverageMask,
   sampleCoverageSource,
 } from '../src/field-mask-operators.mjs';
 
 const registry = createHandRegistry(COVERAGE_MASK_HANDS);
+const cellularRegistry = createHandRegistry(CELLULAR_COVERAGE_MASK_HANDS);
 
 function graphWithGrid(width, height, maxCells = 16384) {
   return {
@@ -27,8 +32,27 @@ function graphWithGrid(width, height, maxCells = 16384) {
   };
 }
 
+function cellularGraphWithGrid(width, height, maxCells = 16384) {
+  return {
+    ...CELLULAR_COVERAGE_MASK_GRAPH,
+    stages: [
+      CELLULAR_COVERAGE_MASK_GRAPH.stages[0],
+      CELLULAR_COVERAGE_MASK_GRAPH.stages[1],
+      {
+        id: 'build-mask-grid',
+        hand: 'fx.field.coverage-mask-grid-build',
+        params: { width, height, maxCells },
+      },
+    ],
+  };
+}
+
 function run(state, graph = COVERAGE_MASK_GRAPH, callerKind = 'test') {
   return executeHandGraph({ registry, graph, initialState: state, context: { callerKind } });
+}
+
+function runCellular(state, graph = CELLULAR_COVERAGE_MASK_GRAPH, callerKind = 'test') {
+  return executeHandGraph({ registry: cellularRegistry, graph, initialState: state, context: { callerKind } });
 }
 
 function maskFrom(result, id) {
@@ -154,5 +178,103 @@ test('invalid mask parameters and oversized derived working sets fail explicitly
   assert.throws(
     () => run(makeCoverageMaskState({ mask: { id: 'cell-budget' } }), graphWithGrid(100, 100, 4096)),
     /coverageMask cell budget exceeded: 10000 > 4096/,
+  );
+});
+
+test('the same coverage-mask Hands consume cellular sources deterministically for human and machine callers', () => {
+  const state = makeCellularCoverageMaskState({
+    field: {
+      id: 'cellular-neutral-field',
+      seed: 7331,
+      frequency: 7.25,
+      jitter: 0.83,
+      offset: [0.2, -0.35],
+      valueMode: 'inverse-distance',
+    },
+    mask: { id: 'cellular-neutral-mask', threshold: 0.58, softness: 0.07 },
+  });
+  const human = runCellular(state, CELLULAR_COVERAGE_MASK_GRAPH, 'human');
+  const machine = runCellular(state, CELLULAR_COVERAGE_MASK_GRAPH, 'machine');
+  const humanMask = maskFrom(human, 'cellular-neutral-mask');
+
+  assert.equal(human.finalStateHash, machine.finalStateHash);
+  assert.equal(human.finalState.cellularFieldSourceHash, machine.finalState.cellularFieldSourceHash);
+  assert.equal(human.finalState.coverageMaskSourceHash, machine.finalState.coverageMaskSourceHash);
+  assert.equal(human.finalState.coverageMaskSource.fieldSourceHash, human.finalState.cellularFieldSourceHash);
+  assert.equal(humanMask.fieldSourceHash, human.finalState.cellularFieldSourceHash);
+  assert.equal(humanMask.maskHash, maskFrom(machine, 'cellular-neutral-mask').maskHash);
+  assert.ok(humanMask.values.some((value) => value > 0 && value < 1));
+  assert.equal(
+    sampleCoverageSource(human.finalState.cellularFieldSource, human.finalState.coverageMaskSource, 0.37, 0.61),
+    sampleCoverageSource(machine.finalState.cellularFieldSource, machine.finalState.coverageMaskSource, 0.37, 0.61),
+  );
+});
+
+test('cellular source truth and the canonical mask transfer stay stable across derived resolutions', () => {
+  const state = makeCellularCoverageMaskState({
+    field: { id: 'cellular-resolution', seed: 222, frequency: 5.5, jitter: 0.6, valueMode: 'distance' },
+    mask: { id: 'cellular-resolution-mask', threshold: 0.36, softness: 0.14, invert: true },
+  });
+  const low = runCellular(state, cellularGraphWithGrid(12, 9)).finalState;
+  const high = runCellular(state, cellularGraphWithGrid(64, 40)).finalState;
+
+  assert.equal(low.cellularFieldSourceHash, high.cellularFieldSourceHash);
+  assert.equal(low.coverageMaskSourceHash, high.coverageMaskSourceHash);
+  assert.deepEqual(low.coverageMaskSource, high.coverageMaskSource);
+  assert.notEqual(low.coverageMasks['cellular-resolution-mask'].maskHash, high.coverageMasks['cellular-resolution-mask'].maskHash);
+});
+
+test('one coverage contract stays source-honest across materially different fBm and cellular families', () => {
+  const mask = { id: 'cross-family-mask', threshold: 0.5, softness: 0.1, invert: false };
+  const fbm = run(makeCoverageMaskState({
+    field: { id: 'cross-family-field', seed: 91, frequency: 4.5, octaves: 4, gain: 0.55 },
+    mask,
+  })).finalState;
+  const cellular = runCellular(makeCellularCoverageMaskState({
+    field: { id: 'cross-family-field', seed: 91, frequency: 4.5, jitter: 0.9, valueMode: 'distance' },
+    mask,
+  })).finalState;
+
+  assert.equal(fbm.coverageMaskSource.transfer, cellular.coverageMaskSource.transfer);
+  assert.equal(fbm.coverageMaskSource.threshold, cellular.coverageMaskSource.threshold);
+  assert.equal(fbm.coverageMaskSource.softness, cellular.coverageMaskSource.softness);
+  assert.notEqual(fbm.coverageMaskSource.fieldSourceHash, cellular.coverageMaskSource.fieldSourceHash);
+  assert.notEqual(fbm.coverageMasks['cross-family-mask'].maskHash, cellular.coverageMasks['cross-family-mask'].maskHash);
+});
+
+test('multiple retained scalar sources require explicit selection and self-consistent cellular semantic tampering is rejected', () => {
+  const fbm = run(makeCoverageMaskState({
+    field: { id: 'dual-fbm', seed: 7 },
+    mask: { id: 'dual-mask', threshold: 0.5, softness: 0.08 },
+  })).finalState;
+  const cellular = runCellular(makeCellularCoverageMaskState({
+    field: { id: 'dual-cellular', seed: 8, jitter: 0.75 },
+    mask: { id: 'cellular-mask', threshold: 0.5, softness: 0.08 },
+  })).finalState;
+  const dual = {
+    ...fbm,
+    cellularFieldSource: cellular.cellularFieldSource,
+    cellularFieldSourceHash: cellular.cellularFieldSourceHash,
+    maskRequest: { id: 'dual-mask', threshold: 0.5, softness: 0.08 },
+  };
+
+  assert.throws(
+    () => normalizeCoverageMaskRequestHand.execute(dual),
+    /found multiple scalar sources; set maskRequest\.fieldSourceKind explicitly/,
+  );
+  const selected = normalizeCoverageMaskRequestHand.execute({
+    ...dual,
+    maskRequest: { ...dual.maskRequest, fieldSourceKind: 'cellular' },
+  }).state;
+  assert.equal(selected.coverageMaskSource.fieldSourceHash, cellular.cellularFieldSourceHash);
+  assert.equal(selected.coverageMaskSource.fieldId, cellular.cellularFieldSource.id);
+
+  const tampered = structuredClone(cellular);
+  tampered.cellularFieldSource.algorithm = 'pretend-compatible-cellular';
+  tampered.cellularFieldSourceHash = hashValue(tampered.cellularFieldSource);
+  tampered.maskRequest = { id: 'tampered-mask', fieldSourceKind: 'cellular', threshold: 0.5, softness: 0.08 };
+  assert.throws(
+    () => normalizeCoverageMaskRequestHand.execute(tampered),
+    /unsupported cellular field algorithm/,
   );
 });

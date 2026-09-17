@@ -4,6 +4,11 @@ import {
   normalizeScalarFieldRequestHand,
   sampleFbmSource,
 } from './field-operators.mjs';
+import {
+  makeCellularFieldState,
+  normalizeCellularFieldRequestHand,
+  sampleCellularFieldSource,
+} from './cellular-field2d.mjs';
 
 const clamp01 = (value) => Math.max(0, Math.min(1, Number(value)));
 const round6 = (value) => Number(Number(value).toFixed(6));
@@ -49,6 +54,87 @@ function smoothCoverage(value, threshold, softness) {
   return t * t * (3 - 2 * t);
 }
 
+function scalarSourceKind(source) {
+  if (!source || typeof source !== 'object') throw new Error('continuous scalar source must be an object');
+  if (source.schema === 'axm.scalar-field-source/v0.1') return 'fbm';
+  if (source.schema === 'axm.cellular-field-source/v0.1') return 'cellular';
+  throw new Error(`unsupported continuous scalar source schema: ${source.schema ?? 'missing'}`);
+}
+
+function validateContinuousScalarSource(source) {
+  const kind = scalarSourceKind(source);
+  if (kind === 'fbm') {
+    if (source.algorithm !== 'fbm-value-noise-2d') throw new Error('unsupported fBm scalar field algorithm');
+  } else {
+    if (source.algorithm !== 'nearest-feature-cellular2d-radius2-v0.1') {
+      throw new Error('unsupported cellular field algorithm');
+    }
+    if (source.searchRadius !== 2) throw new Error('unsupported cellular field search radius');
+    if (!['distance', 'inverse-distance'].includes(source.valueMode)) {
+      throw new Error('unsupported cellular field value mode');
+    }
+  }
+  return kind;
+}
+
+function scalarSourceCandidates(state) {
+  const candidates = [];
+  if (state.fieldSource && state.fieldSourceHash) {
+    candidates.push({ kind: 'fbm', source: state.fieldSource, hash: state.fieldSourceHash });
+  }
+  if (state.cellularFieldSource && state.cellularFieldSourceHash) {
+    candidates.push({ kind: 'cellular', source: state.cellularFieldSource, hash: state.cellularFieldSourceHash });
+  }
+  return candidates;
+}
+
+function validateSourceBinding(binding) {
+  if (hashValue(binding.source) !== binding.hash) {
+    throw new Error(`${binding.kind} scalar field source hash mismatch`);
+  }
+  const actualKind = validateContinuousScalarSource(binding.source);
+  if (actualKind !== binding.kind) throw new Error('continuous scalar source kind mismatch');
+  return binding;
+}
+
+function selectScalarSourceBinding(state, requestedKind) {
+  if (requestedKind !== undefined && !['fbm', 'cellular'].includes(requestedKind)) {
+    throw new Error('maskRequest.fieldSourceKind must be fbm or cellular');
+  }
+  const candidates = scalarSourceCandidates(state);
+  const eligible = requestedKind === undefined
+    ? candidates
+    : candidates.filter((candidate) => candidate.kind === requestedKind);
+
+  if (eligible.length === 0) {
+    throw new Error(requestedKind === undefined
+      ? 'coverage mask normalization requires one normalized supported continuous scalar field source'
+      : `coverage mask normalization requires normalized ${requestedKind} scalar field source`);
+  }
+  if (eligible.length > 1 || (requestedKind === undefined && candidates.length > 1)) {
+    throw new Error('coverage mask normalization found multiple scalar sources; set maskRequest.fieldSourceKind explicitly');
+  }
+  return validateSourceBinding(eligible[0]);
+}
+
+function resolveMaskSourceBinding(state, maskSource) {
+  const candidates = scalarSourceCandidates(state).filter((candidate) => (
+    candidate.hash === maskSource.fieldSourceHash
+    && candidate.source?.id === maskSource.fieldId
+  ));
+  if (candidates.length === 0) {
+    throw new Error('coverage mask source does not match any retained supported scalar field source');
+  }
+  if (candidates.length > 1) throw new Error('coverage mask source lineage is ambiguous');
+  return validateSourceBinding(candidates[0]);
+}
+
+function sampleContinuousScalarSource(source, kind, u, v) {
+  return kind === 'fbm'
+    ? sampleFbmSource(source, u, v)
+    : sampleCellularFieldSource(source, u, v);
+}
+
 export function coverageFromScalar(maskSource, scalarValue) {
   if (!maskSource || maskSource.schema !== 'axm.coverage-mask-source/v0.1') {
     throw new Error('coverageFromScalar requires normalized coverage mask source');
@@ -59,16 +145,14 @@ export function coverageFromScalar(maskSource, scalarValue) {
 }
 
 export function sampleCoverageSource(fieldSource, maskSource, u, v) {
-  if (!fieldSource || fieldSource.schema !== 'axm.scalar-field-source/v0.1') {
-    throw new Error('sampleCoverageSource requires normalized scalar field source');
-  }
   if (!maskSource || maskSource.schema !== 'axm.coverage-mask-source/v0.1') {
     throw new Error('sampleCoverageSource requires normalized coverage mask source');
   }
-  if (hashValue(fieldSource) !== maskSource.fieldSourceHash) {
+  const kind = validateContinuousScalarSource(fieldSource);
+  if (hashValue(fieldSource) !== maskSource.fieldSourceHash || fieldSource.id !== maskSource.fieldId) {
     throw new Error('coverage mask source does not match supplied scalar field source');
   }
-  return coverageFromScalar(maskSource, sampleFbmSource(fieldSource, u, v));
+  return coverageFromScalar(maskSource, sampleContinuousScalarSource(fieldSource, kind, u, v));
 }
 
 export function sampleCoverageMask(mask, u, v) {
@@ -91,9 +175,6 @@ export function sampleCoverageMask(mask, u, v) {
 
 export const normalizeCoverageMaskRequestHand = hand('fx.field.coverage-mask-source-normalize', (state) => {
   const next = deepClone(state);
-  if (!next.fieldSource || !next.fieldSourceHash) {
-    throw new Error('coverage mask normalization requires normalized scalar field source');
-  }
   const request = next.maskRequest;
   if (!request || typeof request !== 'object') throw new Error('coverage mask requires maskRequest state');
   const id = String(request.id ?? 'coverage-mask').trim();
@@ -102,11 +183,12 @@ export const normalizeCoverageMaskRequestHand = hand('fx.field.coverage-mask-sou
     throw new Error('maskRequest.invert must be boolean');
   }
 
+  const binding = selectScalarSourceBinding(next, request.fieldSourceKind);
   next.coverageMaskSource = {
     schema: 'axm.coverage-mask-source/v0.1',
     id,
-    fieldId: next.fieldSource.id,
-    fieldSourceHash: next.fieldSourceHash,
+    fieldId: binding.source.id,
+    fieldSourceHash: binding.hash,
     transfer: 'smooth-threshold',
     threshold: round6(bounded(request.threshold ?? 0.5, 0, 1, 'maskRequest.threshold')),
     softness: round6(bounded(request.softness ?? 0.08, 0, 0.5, 'maskRequest.softness')),
@@ -117,24 +199,25 @@ export const normalizeCoverageMaskRequestHand = hand('fx.field.coverage-mask-sou
   return {
     state: next,
     evidence: {
-      fieldSourceHash: next.fieldSourceHash,
+      fieldSourceKind: binding.kind,
+      fieldSourceHash: binding.hash,
       coverageMaskSourceHash: next.coverageMaskSourceHash,
       threshold: next.coverageMaskSource.threshold,
       softness: next.coverageMaskSource.softness,
       invert: next.coverageMaskSource.invert,
     },
   };
-}, 'Normalize a renderer-neutral coverage-mask transfer over one canonical continuous scalar field source.');
+}, 'Normalize one renderer-neutral coverage-mask transfer over a retained supported continuous scalar field source.');
 
 export const buildCoverageMaskGridHand = hand('fx.field.coverage-mask-grid-build', (state, params = {}) => {
   const next = deepClone(state);
-  if (!next.fieldSource || !next.fieldSourceHash) throw new Error('coverage-mask-grid-build requires normalized field source');
   if (!next.coverageMaskSource || !next.coverageMaskSourceHash) {
     throw new Error('coverage-mask-grid-build requires normalized coverage mask source');
   }
-  if (next.coverageMaskSource.fieldSourceHash !== next.fieldSourceHash) {
-    throw new Error('coverage mask source field hash mismatch');
+  if (hashValue(next.coverageMaskSource) !== next.coverageMaskSourceHash) {
+    throw new Error('coverage mask source state hash mismatch');
   }
+  const binding = resolveMaskSourceBinding(next, next.coverageMaskSource);
 
   const width = boundedInteger(params.width ?? 48, 4, 128, 'coverageMask.width');
   const height = boundedInteger(params.height ?? 32, 4, 128, 'coverageMask.height');
@@ -154,7 +237,10 @@ export const buildCoverageMaskGridHand = hand('fx.field.coverage-mask-grid-build
     const v = y / (height - 1);
     for (let x = 0; x < width; x += 1) {
       const u = x / (width - 1);
-      const value = sampleCoverageSource(next.fieldSource, next.coverageMaskSource, u, v);
+      const value = coverageFromScalar(
+        next.coverageMaskSource,
+        sampleContinuousScalarSource(binding.source, binding.kind, u, v),
+      );
       values.push(value);
       min = Math.min(min, value);
       max = Math.max(max, value);
@@ -166,7 +252,7 @@ export const buildCoverageMaskGridHand = hand('fx.field.coverage-mask-grid-build
 
   const grid = {
     schema: 'axm.coverage-mask-grid/v0.1',
-    fieldSourceHash: next.fieldSourceHash,
+    fieldSourceHash: binding.hash,
     maskSourceHash: next.coverageMaskSourceHash,
     width,
     height,
@@ -194,7 +280,8 @@ export const buildCoverageMaskGridHand = hand('fx.field.coverage-mask-grid-build
   return {
     state: next,
     evidence: {
-      fieldSourceHash: next.fieldSourceHash,
+      fieldSourceKind: binding.kind,
+      fieldSourceHash: binding.hash,
       coverageMaskSourceHash: next.coverageMaskSourceHash,
       maskHash: grid.maskHash,
       width,
@@ -207,10 +294,16 @@ export const buildCoverageMaskGridHand = hand('fx.field.coverage-mask-grid-build
       transparentCells,
     },
   };
-}, 'Build a bounded rebuildable coverage grid from a continuous scalar field plus canonical mask transfer without assigning consumer meaning.');
+}, 'Build a bounded rebuildable coverage grid from one supported continuous scalar field plus canonical mask transfer without assigning consumer meaning.');
 
 export const COVERAGE_MASK_HANDS = [
   normalizeScalarFieldRequestHand,
+  normalizeCoverageMaskRequestHand,
+  buildCoverageMaskGridHand,
+];
+
+export const CELLULAR_COVERAGE_MASK_HANDS = [
+  normalizeCellularFieldRequestHand,
   normalizeCoverageMaskRequestHand,
   buildCoverageMaskGridHand,
 ];
@@ -226,6 +319,17 @@ export const COVERAGE_MASK_GRAPH = Object.freeze({
   ],
 });
 
+export const CELLULAR_COVERAGE_MASK_GRAPH = Object.freeze({
+  schema: 'axm.hand-graph/v0.1',
+  id: 'fx.field.coverage-mask2d-cellular',
+  version: '0.1.0',
+  stages: [
+    { id: 'normalize-cellular-source', hand: 'fx.field.cellular-source-normalize', params: {} },
+    { id: 'normalize-mask-source', hand: 'fx.field.coverage-mask-source-normalize', params: {} },
+    { id: 'build-mask-grid', hand: 'fx.field.coverage-mask-grid-build', params: { width: 48, height: 32, maxCells: 16384 } },
+  ],
+});
+
 export function makeCoverageMaskState(options = {}) {
   const fieldState = makeScalarFieldState(options.field ?? {});
   const mask = options.mask ?? {};
@@ -233,6 +337,22 @@ export function makeCoverageMaskState(options = {}) {
     ...fieldState,
     maskRequest: {
       id: mask.id ?? 'coverage-mask',
+      threshold: mask.threshold ?? 0.5,
+      softness: mask.softness ?? 0.08,
+      invert: mask.invert ?? false,
+    },
+    coverageMasks: {},
+  };
+}
+
+export function makeCellularCoverageMaskState(options = {}) {
+  const fieldState = makeCellularFieldState(options.field ?? {});
+  const mask = options.mask ?? {};
+  return {
+    ...fieldState,
+    maskRequest: {
+      id: mask.id ?? 'coverage-mask',
+      fieldSourceKind: 'cellular',
       threshold: mask.threshold ?? 0.5,
       softness: mask.softness ?? 0.08,
       invert: mask.invert ?? false,
