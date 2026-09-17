@@ -56,12 +56,21 @@ function requireExactLineage(next, selected) {
   validateNormalizedPathArray(selected.paths, fragmentCount, pointCount, 'path-break SVG fragments');
 
   const sourceIds = new Set(next.paths.map((path) => String(path.id)));
-  for (const [fragmentIndex, fragment] of selected.paths.entries()) {
-    if (!sourceIds.has(String(fragment.sourcePathId))) {
-      throw new Error(`path-break SVG fragment ${fragmentIndex} source path identity mismatch`);
+  if (next.pathBreakSource.breakCount === 0) {
+    if (selected.fragmentCount !== selected.sourcePathCount || selected.pointCount !== selected.sourcePointCount) {
+      throw new Error('path-break SVG zero-break cardinality mismatch');
     }
-    if (!Number.isInteger(fragment.fragmentIndex) || fragment.fragmentIndex < 0) {
-      throw new Error(`path-break SVG fragment ${fragmentIndex} index is malformed`);
+    for (const [pathIndex, path] of selected.paths.entries()) {
+      if (!sourceIds.has(String(path.id))) throw new Error(`path-break SVG zero-break path ${pathIndex} identity mismatch`);
+    }
+  } else {
+    for (const [fragmentIndex, fragment] of selected.paths.entries()) {
+      if (!sourceIds.has(String(fragment.sourcePathId))) {
+        throw new Error(`path-break SVG fragment ${fragmentIndex} source path identity mismatch`);
+      }
+      if (!Number.isInteger(fragment.fragmentIndex) || fragment.fragmentIndex < 0) {
+        throw new Error(`path-break SVG fragment ${fragmentIndex} index is malformed`);
+      }
     }
   }
 
