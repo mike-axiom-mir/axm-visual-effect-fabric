@@ -65,6 +65,28 @@ function validateCoverageMaskSource(source) {
   return source;
 }
 
+function validateMaskDistanceSource(source) {
+  if (!source || source.schema !== 'axm.mask-distance-source/v0.1') {
+    throw new Error('mask distance requires normalized distance source');
+  }
+  if (source.algorithm !== 'exact-opposite-cell-center-euclidean2d-v0.1') {
+    throw new Error('unsupported mask distance algorithm');
+  }
+  if (source.metric !== 'euclidean-normalized-domain') {
+    throw new Error('unsupported mask distance metric');
+  }
+  if (source.signConvention !== 'coverage-gte-iso-positive') {
+    throw new Error('unsupported mask distance sign convention');
+  }
+  if (source.noOppositeClassDistance !== DOMAIN_DIAGONAL) {
+    throw new Error('unsupported mask distance no-opposite-class policy');
+  }
+  bounded(source.isoLevel, 0, 1, 'maskDistanceSource.isoLevel');
+  if (!String(source.maskId ?? '').trim()) throw new Error('mask distance source maskId must be non-empty');
+  if (!String(source.maskSourceHash ?? '').trim()) throw new Error('mask distance source mask hash must be non-empty');
+  return source;
+}
+
 function validateCoverageGrid(mask) {
   if (!mask || mask.schema !== 'axm.coverage-mask-grid/v0.1') {
     throw new Error('mask distance requires coverage mask grid');
@@ -83,7 +105,7 @@ function validateCoverageGrid(mask) {
   return { width, height, cells: width * height };
 }
 
-function distanceCore(mask, isoLevel) {
+function classifyMask(mask, isoLevel) {
   const { width, height, cells } = validateCoverageGrid(mask);
   const inside = [];
   const outside = [];
@@ -92,28 +114,41 @@ function distanceCore(mask, isoLevel) {
     if (mask.values[index] >= isoLevel) inside.push(point);
     else outside.push(point);
   }
+  return {
+    width,
+    height,
+    cells,
+    inside,
+    outside,
+    comparisonCount: inside.length > 0 && outside.length > 0
+      ? 2 * inside.length * outside.length
+      : 0,
+  };
+}
 
-  const comparisonCount = inside.length > 0 && outside.length > 0
-    ? 2 * inside.length * outside.length
-    : 0;
+function distanceCore(mask, isoLevel, maxComparisons = HARD_MAX_COMPARISONS) {
+  const classified = classifyMask(mask, isoLevel);
+  if (classified.comparisonCount > maxComparisons) {
+    throw new Error(`maskDistance comparison budget exceeded: ${classified.comparisonCount} > ${maxComparisons}`);
+  }
 
-  const values = new Array(cells);
+  const values = new Array(classified.cells);
   let min = Infinity;
   let max = -Infinity;
   let maxAbs = 0;
 
-  for (let index = 0; index < cells; index += 1) {
-    const x = index % width;
-    const y = Math.floor(index / width);
+  for (let index = 0; index < classified.cells; index += 1) {
+    const x = index % classified.width;
+    const y = Math.floor(index / classified.width);
     const isInside = mask.values[index] >= isoLevel;
-    const targets = isInside ? outside : inside;
+    const targets = isInside ? classified.outside : classified.inside;
     let distance = DOMAIN_DIAGONAL;
 
     if (targets.length > 0) {
       let bestSquared = Infinity;
       for (const target of targets) {
-        const dx = (x - target.x) / (width - 1);
-        const dy = (y - target.y) / (height - 1);
+        const dx = (x - target.x) / (classified.width - 1);
+        const dy = (y - target.y) / (classified.height - 1);
         const squared = dx * dx + dy * dy;
         if (squared < bestSquared) bestSquared = squared;
       }
@@ -128,13 +163,13 @@ function distanceCore(mask, isoLevel) {
   }
 
   return {
-    width,
-    height,
-    cells,
+    width: classified.width,
+    height: classified.height,
+    cells: classified.cells,
     values,
-    insideCells: inside.length,
-    outsideCells: outside.length,
-    comparisonCount,
+    insideCells: classified.inside.length,
+    outsideCells: classified.outside.length,
+    comparisonCount: classified.comparisonCount,
     min: round6(min),
     max: round6(max),
     maxAbs: round6(maxAbs),
@@ -143,7 +178,7 @@ function distanceCore(mask, isoLevel) {
 
 export function computeSignedMaskDistanceGrid(mask, isoLevel = 0.5) {
   const level = round6(bounded(isoLevel, 0, 1, 'maskDistance.isoLevel'));
-  return distanceCore(mask, level);
+  return distanceCore(mask, level, HARD_MAX_COMPARISONS);
 }
 
 export function sampleSignedMaskDistanceGrid(grid, u, v) {
@@ -192,6 +227,7 @@ export const normalizeMaskDistanceRequestHand = hand('fx.field.mask-distance-sou
     signConvention: 'coverage-gte-iso-positive',
     noOppositeClassDistance: DOMAIN_DIAGONAL,
   };
+  validateMaskDistanceSource(next.maskDistanceSource);
   next.maskDistanceSourceHash = hashValue(next.maskDistanceSource);
 
   return {
@@ -211,6 +247,7 @@ export const buildSignedMaskDistanceGridHand = hand('fx.field.mask-distance-grid
   if (!next.maskDistanceSource || !next.maskDistanceSourceHash) {
     throw new Error('mask-distance-grid-build requires normalized mask distance source');
   }
+  validateMaskDistanceSource(next.maskDistanceSource);
   if (hashValue(next.maskDistanceSource) !== next.maskDistanceSourceHash) {
     throw new Error('mask distance source state hash mismatch');
   }
@@ -220,6 +257,9 @@ export const buildSignedMaskDistanceGridHand = hand('fx.field.mask-distance-grid
   }
   if (next.maskDistanceSource.maskSourceHash !== next.coverageMaskSourceHash) {
     throw new Error('mask distance retained coverage source hash mismatch');
+  }
+  if (next.maskDistanceSource.maskId !== next.coverageMaskSource.id) {
+    throw new Error('mask distance retained mask id mismatch');
   }
 
   const mask = next.coverageMasks?.[next.maskDistanceSource.maskId];
@@ -235,6 +275,12 @@ export const buildSignedMaskDistanceGridHand = hand('fx.field.mask-distance-grid
   if (maskStats.cells > maxCells) {
     throw new Error(`maskDistance cell budget exceeded: ${maskStats.cells} > ${maxCells}`);
   }
+  const maxComparisons = boundedInteger(
+    params.maxComparisons ?? HARD_MAX_COMPARISONS,
+    0,
+    HARD_MAX_COMPARISONS,
+    'maskDistance.maxComparisons',
+  );
 
   const rebuilt = buildCoverageMaskGridHand.execute(next, {
     width: maskStats.width,
@@ -245,17 +291,7 @@ export const buildSignedMaskDistanceGridHand = hand('fx.field.mask-distance-grid
     throw new Error('mask distance coverage grid differs from source-truth rebuild');
   }
 
-  const computed = distanceCore(mask, next.maskDistanceSource.isoLevel);
-  const maxComparisons = boundedInteger(
-    params.maxComparisons ?? HARD_MAX_COMPARISONS,
-    0,
-    HARD_MAX_COMPARISONS,
-    'maskDistance.maxComparisons',
-  );
-  if (computed.comparisonCount > maxComparisons) {
-    throw new Error(`maskDistance comparison budget exceeded: ${computed.comparisonCount} > ${maxComparisons}`);
-  }
-
+  const computed = distanceCore(mask, next.maskDistanceSource.isoLevel, maxComparisons);
   const grid = {
     schema: 'axm.signed-mask-distance-grid/v0.1',
     distanceSourceHash: next.maskDistanceSourceHash,
