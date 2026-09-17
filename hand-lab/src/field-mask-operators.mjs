@@ -65,9 +65,14 @@ function validateContinuousScalarSource(source) {
   const kind = scalarSourceKind(source);
   if (kind === 'fbm') {
     if (source.algorithm !== 'fbm-value-noise-2d') throw new Error('unsupported fBm scalar field algorithm');
-    sampleFbmSource(source, 0, 0);
   } else {
-    sampleCellularFieldSource(source, 0, 0);
+    if (source.algorithm !== 'nearest-feature-cellular2d-radius2-v0.1') {
+      throw new Error('unsupported cellular field algorithm');
+    }
+    if (source.searchRadius !== 2) throw new Error('unsupported cellular field search radius');
+    if (!['distance', 'inverse-distance'].includes(source.valueMode)) {
+      throw new Error('unsupported cellular field value mode');
+    }
   }
   return kind;
 }
@@ -124,8 +129,7 @@ function resolveMaskSourceBinding(state, maskSource) {
   return validateSourceBinding(candidates[0]);
 }
 
-function sampleContinuousScalarSource(source, u, v) {
-  const kind = validateContinuousScalarSource(source);
+function sampleContinuousScalarSource(source, kind, u, v) {
   return kind === 'fbm'
     ? sampleFbmSource(source, u, v)
     : sampleCellularFieldSource(source, u, v);
@@ -148,9 +152,7 @@ export function sampleCoverageSource(fieldSource, maskSource, u, v) {
   if (hashValue(fieldSource) !== maskSource.fieldSourceHash || fieldSource.id !== maskSource.fieldId) {
     throw new Error('coverage mask source does not match supplied scalar field source');
   }
-  return coverageFromScalar(maskSource, kind === 'fbm'
-    ? sampleFbmSource(fieldSource, u, v)
-    : sampleCellularFieldSource(fieldSource, u, v));
+  return coverageFromScalar(maskSource, sampleContinuousScalarSource(fieldSource, kind, u, v));
 }
 
 export function sampleCoverageMask(mask, u, v) {
@@ -235,7 +237,10 @@ export const buildCoverageMaskGridHand = hand('fx.field.coverage-mask-grid-build
     const v = y / (height - 1);
     for (let x = 0; x < width; x += 1) {
       const u = x / (width - 1);
-      const value = coverageFromScalar(next.coverageMaskSource, sampleContinuousScalarSource(binding.source, u, v));
+      const value = coverageFromScalar(
+        next.coverageMaskSource,
+        sampleContinuousScalarSource(binding.source, binding.kind, u, v),
+      );
       values.push(value);
       min = Math.min(min, value);
       max = Math.max(max, value);
