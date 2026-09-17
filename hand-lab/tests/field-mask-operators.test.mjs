@@ -52,7 +52,7 @@ function run(state, graph = COVERAGE_MASK_GRAPH, callerKind = 'test') {
 }
 
 function runCellular(state, graph = CELLULAR_COVERAGE_MASK_GRAPH, callerKind = 'test') {
-  return executeHandGraph({ cellularRegistry, graph, initialState: state, context: { callerKind } });
+  return executeHandGraph({ registry: cellularRegistry, graph, initialState: state, context: { callerKind } });
 }
 
 function maskFrom(result, id) {
