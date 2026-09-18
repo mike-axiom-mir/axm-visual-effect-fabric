@@ -207,7 +207,7 @@ test('missing derivation, retained-source drift, forged propagation semantics an
   delete missing.pathSweepIndexedStripSets.sweep;
   assert.throws(
     () => buildPathSweepPropagationWeightSetHand.execute(missing, {}),
-    /requires derived indexed strip set for source: sweep/,
+    /require derived indexed strip set for source: sweep/,
   );
 
   const pathDrift = structuredClone(result.finalState);
