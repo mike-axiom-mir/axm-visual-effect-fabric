@@ -162,7 +162,7 @@ test('structural and renderer budgets fail loudly without changing canonical sou
   const built = withEnvelope(prepared({ generations: 5 }), 0.5);
   const branchHash = built.branchGrowthSourceHash;
   const propagationHash = built.propagationFrontSourceHash;
-  assert.throws(() => realizeBranchPropagationStaticSvgHand.execute(built, { maxSegments: 10 }, {}), /exceeds maxSegments 10/);
+  assert.throws(() => realizeBranchPropagationStaticSvgHand.execute(built, { maxSegments: 10 }, {}), /segmentCount.*\[1,10\]/);
   assert.throws(() => realizeBranchPropagationStaticSvgHand.execute(built, { maxSegments: 4097 }, {}), /maxSegments.*\[1,4096\]/);
   assert.throws(() => realizeBranchPropagationStaticSvgHand.execute(built, { width: 5000 }, {}), /width.*\[16,4096\]/);
   assert.equal(built.branchGrowthSourceHash, branchHash);
