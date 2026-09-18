@@ -108,8 +108,8 @@ test('neutral vertex weights become flat per-segment SVG opacity and full weight
   assert.equal(polygons.length, 4);
   assert.doesNotMatch(polygons[0], / opacity=/);
   assert.doesNotMatch(polygons[1], / opacity=/);
-  assert.match(polygons[2], / opacity="0.5"/);
-  assert.match(polygons[3], / opacity="0.5"/);
+  assert.match(polygons[2], / opacity="0\.500"/);
+  assert.match(polygons[3], / opacity="0\.500"/);
   assert.equal(early.rendererMapping.segmentWeight, 'mean-adjacent-source-point-weight');
   assert.equal(early.rendererMapping.interpolationAuthority, 'renderer-local-flat-segment-only');
 
