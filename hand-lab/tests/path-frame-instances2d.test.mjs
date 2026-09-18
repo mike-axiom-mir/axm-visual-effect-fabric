@@ -216,7 +216,7 @@ test('missing frame derivation, retained-path drift, invalid stride and excessiv
   delete missing.pathSweepFrameSets.sweep;
   assert.throws(
     () => buildPathFrameInstanceTransformSetHand.execute(missing, {}),
-    /requires derived frame set for source: sweep/,
+    /require derived frame set for source: sweep/,
   );
 
   const drift = structuredClone(result.finalState);
