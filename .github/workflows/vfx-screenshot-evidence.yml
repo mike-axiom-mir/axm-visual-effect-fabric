@@ -1,0 +1,42 @@
+name: VFX screenshot evidence
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - hand-lab/src/particle-flow-static-svg.mjs
+      - hand-lab/src/light-particle-layer-static-svg.mjs
+      - hand-lab/examples/light-particle-layer-ci-screenshot.mjs
+      - .github/workflows/vfx-screenshot-evidence.yml
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install SVG rasterizer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin
+          rsvg-convert --version
+      - name: Generate exact merged composition SVG
+        run: node hand-lab/examples/light-particle-layer-ci-screenshot.mjs
+      - name: Rasterize exact SVG to PNG
+        run: |
+          rsvg-convert             --width 960             --height 630             hand-lab/out/ci-vfx-evidence/light-particle-composite.svg             --output hand-lab/out/ci-vfx-evidence/light-particle-composite.png
+          test -s hand-lab/out/ci-vfx-evidence/light-particle-composite.png
+          file hand-lab/out/ci-vfx-evidence/light-particle-composite.png
+          sha256sum             hand-lab/out/ci-vfx-evidence/light-particle-composite.svg             hand-lab/out/ci-vfx-evidence/light-particle-composite.png             hand-lab/out/ci-vfx-evidence/evidence.json             > hand-lab/out/ci-vfx-evidence/SHA256SUMS.txt
+      - name: Upload screenshot evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: axm-vfx-light-particle-screenshot
+          path: hand-lab/out/ci-vfx-evidence/
+          if-no-files-found: error
+          retention-days: 14
