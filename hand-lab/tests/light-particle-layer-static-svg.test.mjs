@@ -187,6 +187,9 @@ test('composite static SVG is caller-neutral, derived/replaceable and preserves 
   assert.equal(view.semantics.materialAuthority, 'none');
   assert.equal(view.semantics.canonicalAuthority, 'none');
   assert.equal(view.semantics.consumerAuthority, 'none');
+  assert.equal(view.semantics.particleBackdropAuthority, 'renderer-local-only');
+  assert.equal(view.renderControls.particleBackgroundMode, 'transparent');
+  assert.equal(view.renderer, 'axm.vfx.light-particle-layer-static-svg/v0.2');
 });
 
 test('verified plan order alone controls subrealization paint order while both subrender hashes stay unchanged', () => {
@@ -220,6 +223,7 @@ test('compositor embeds existing light and particle SVG outputs verbatim instead
     markerRadius: 2.4,
     maxParticles: 2048,
     maxSamples: 65536,
+    backgroundMode: 'transparent',
   }).state.realizations.particleFlowStaticSvg;
   const composite = realization(runComposite(state).finalState);
   const byId = Object.fromEntries(composite.layers.map((layer) => [layer.layerId, layer]));
@@ -230,6 +234,28 @@ test('compositor embeds existing light and particle SVG outputs verbatim instead
   assert.equal(byId.particles.contentHash, hashValue(particles.content));
   assert.ok(composite.content.includes(light.content));
   assert.ok(composite.content.includes(particles.content));
+  assert.equal(particles.backgroundMode, 'transparent');
+  assert.doesNotMatch(particles.content, /data-layer="inspection-background"/);
+});
+
+test('composition removes the known opaque particle inspection backdrop without changing standalone donor default', () => {
+  const state = preparedState('rays-under-particles');
+  const standalone = particleFlowStaticSvgHand.execute(state.particleFlowState, {
+    width: 640,
+    height: 420,
+    padding: 20,
+    markerRadius: 2.4,
+    maxParticles: 2048,
+    maxSamples: 65536,
+  }).state.realizations.particleFlowStaticSvg;
+  const composite = realization(runComposite(state).finalState);
+
+  assert.equal(standalone.backgroundMode, 'opaque-inspection');
+  assert.match(standalone.content, /data-layer="inspection-background"/);
+  assert.equal(composite.renderControls.particleBackgroundMode, 'transparent');
+  assert.match(composite.content, /data-background-mode="transparent"/);
+  assert.doesNotMatch(composite.content, /data-layer="inspection-background"/);
+  assert.deepEqual(composite.layers.map((layer) => layer.layerId), ['light-rays', 'particles']);
 });
 
 test('renderer-local controls can change inspection output without rewriting plan or donor truth', () => {
