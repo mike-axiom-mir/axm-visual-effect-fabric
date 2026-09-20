@@ -31,6 +31,13 @@ The SVG shows:
 
 The output is deterministic for the same retained state and renderer parameters. Human, model and deterministic callers use the same Hands.
 
+The renderer now exposes one renderer-local backdrop control:
+
+- `backgroundMode: opaque-inspection` (default) preserves the original standalone dark inspection backdrop;
+- `backgroundMode: transparent` omits that backdrop so another replaceable compositor can layer this SVG without hidden occlusion.
+
+This control changes only disposable SVG expression. It does not alter canonical particles, field/flow/advection source state, the derived particle set, or its lineage hashes.
+
 Default realization bounds:
 
 - 640 x 420 logical SVG viewport;
@@ -45,7 +52,7 @@ This renderer is AXM-authored for this repository and reuses only the repository
 
 ## Evidence / non-claims
 
-The automated proof may establish deterministic SVG construction, exact lineage, source-state preservation, bounded working sets and materially different output for materially different derived trajectories.
+The automated proof may establish deterministic SVG construction, exact lineage, source-state preservation, bounded working sets, materially different output for materially different derived trajectories, and renderer-local backdrop interchangeability.
 
 It does **not** establish:
 
@@ -59,4 +66,4 @@ Until real pixels from a named renderer/device are inspected, aesthetic quality 
 
 ## Next bounded target
 
-Use this inspection realization to obtain actual base/derived particle-flow pixels on an identified browser or device. Let observed readability or motion-structure failures drive any later renderer repair. If trustworthy pixel observation remains unavailable, stop expanding this renderer chain and move to a materially different reusable VFX family rather than adding architecture for its own sake.
+Use the transparent renderer-local mode only where a real composition needs it. Preserve the opaque standalone inspection default. Do not promote transparent layering into a visual-quality claim until exact raster/browser/device output is actually inspected.

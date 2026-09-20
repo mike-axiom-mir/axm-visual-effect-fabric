@@ -16,13 +16,14 @@ const FIXED_RENDERER_SEMANTICS = Object.freeze({
   canonicalAuthority: 'none',
   consumerAuthority: 'none',
   sourceMerge: 'none',
+  particleBackdropAuthority: 'renderer-local-only',
 });
 
 function hand(id, execute, description) {
   return Object.freeze({
     schema: 'axm.hand/v0.1',
     id,
-    version: '0.1.0',
+    version: '0.2.0',
     deterministic: true,
     callerNeutral: true,
     network: 'forbidden',
@@ -113,6 +114,9 @@ function assertParticleRealizationLineage(layer, realization) {
     throw new Error('light/particle static SVG particle renderer mismatch');
   }
   const lineage = layer.lineage;
+  if (realization.backgroundMode !== 'transparent') {
+    throw new Error('light/particle static SVG requires transparent particle subrealization background');
+  }
   if (
     realization.particleSourceHash !== lineage.particleSourceHash
     || realization.scalarSourceHash !== lineage.scalarSourceHash
@@ -190,6 +194,7 @@ export const realizeLightParticleLayerStaticSvgHand = hand('fx.composition.light
     markerRadius: particleMarkerRadius,
     maxParticles,
     maxSamples: maxParticleSamples,
+    backgroundMode: 'transparent',
   });
   const lightRealization = selectedLightRealization(lightResult.state);
   const particleRealization = selectedParticleRealization(particleResult.state);
@@ -217,7 +222,7 @@ export const realizeLightParticleLayerStaticSvgHand = hand('fx.composition.light
     const descriptor = descriptors[index];
     return `<g data-layer-id="${escapeAttribute(layer.layerId)}" data-subrenderer="${escapeAttribute(descriptor.renderer)}" data-subcontent-hash="${escapeAttribute(descriptor.contentHash)}">${realization.content}</g>`;
   }).join('');
-  const content = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" data-renderer="axm.vfx.light-particle-layer-static-svg/v0.1" data-plan-id="${escapeAttribute(plan.id)}" data-plan-hash="${escapeAttribute(plan.planHash)}" data-order-mode="${escapeAttribute(plan.orderMode)}"><title>AXM derived light and particle layer inspection</title>${layerMarkup}</svg>`;
+  const content = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" data-renderer="axm.vfx.light-particle-layer-static-svg/v0.2" data-plan-id="${escapeAttribute(plan.id)}" data-plan-hash="${escapeAttribute(plan.planHash)}" data-order-mode="${escapeAttribute(plan.orderMode)}"><title>AXM derived light and particle layer inspection</title>${layerMarkup}</svg>`;
   const bytes = Buffer.byteLength(content);
   if (bytes > maxSvgBytes) {
     throw new Error(`lightParticleSvg output byte budget exceeded: ${bytes} > ${maxSvgBytes}`);
@@ -233,11 +238,12 @@ export const realizeLightParticleLayerStaticSvgHand = hand('fx.composition.light
     particleMarkerRadius,
     maxParticles,
     maxParticleSamples,
+    particleBackgroundMode: 'transparent',
     maxSvgBytes,
   };
   const realization = {
-    schema: 'axm.vfx.light-particle-layer-static-svg/v0.1',
-    renderer: 'axm.vfx.light-particle-layer-static-svg/v0.1',
+    schema: 'axm.vfx.light-particle-layer-static-svg/v0.2',
+    renderer: 'axm.vfx.light-particle-layer-static-svg/v0.2',
     mediaType: 'image/svg+xml',
     derivedFromLayerPlanHash: plan.planHash,
     planId: plan.id,
@@ -273,6 +279,7 @@ export const realizeLightParticleLayerStaticSvgHand = hand('fx.composition.light
       particleCount: particleLayer.itemCount,
       lightCoverageSamples: lightLayer.sampleCount,
       particleTrajectorySamples: particleLayer.sampleCount,
+      particleBackgroundMode: particleRealization.backgroundMode,
       embeddedBytes,
       bytes,
       maxSvgBytes,
@@ -291,7 +298,7 @@ export const LIGHT_PARTICLE_LAYER_STATIC_SVG_HANDS = [realizeLightParticleLayerS
 export const LIGHT_PARTICLE_LAYER_STATIC_SVG_GRAPH = Object.freeze({
   schema: 'axm.hand-graph/v0.1',
   id: 'fx.composition.light-particle-layer-static-svg',
-  version: '0.1.0',
+  version: '0.2.0',
   stages: [
     {
       id: 'realize-verified-layer-plan-static-svg',
