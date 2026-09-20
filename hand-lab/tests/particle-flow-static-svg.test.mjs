@@ -90,7 +90,39 @@ test('particle-flow SVG is deterministic and caller-neutral while canonical part
   assert.match(humanSvg.content, /data-marker="start"/);
   assert.match(humanSvg.content, /data-marker="end"/);
   assert.match(humanSvg.content, /<polyline /);
+  assert.equal(humanSvg.backgroundMode, 'opaque-inspection');
+  assert.match(humanSvg.content, /data-background-mode="opaque-inspection"/);
+  assert.match(humanSvg.content, /data-layer="inspection-background"/);
   assert.ok(Buffer.byteLength(humanSvg.content) > 0);
+});
+
+test('transparent particle background is renderer-local and preserves retained particle-flow truth', () => {
+  const particles = ringSeeds(9);
+  const initial = makeParticleFlowStaticSvgState(particles, {
+    id: 'advected',
+    stepSize: 0.03,
+    steps: 10,
+    flow: { id: 'transparent-flow', mode: 'tangent', strength: 1 },
+    field: { id: 'transparent-field', seed: 7443, frequency: 4.5 },
+  });
+  const opaque = run(initial, 'test', graphWithRendererParams({ backgroundMode: 'opaque-inspection' }));
+  const transparent = run(initial, 'test', graphWithRendererParams({ backgroundMode: 'transparent' }));
+  const a = realization(opaque);
+  const b = realization(transparent);
+
+  assert.equal(a.backgroundMode, 'opaque-inspection');
+  assert.equal(b.backgroundMode, 'transparent');
+  assert.equal(a.derivedFromParticleSetHash, b.derivedFromParticleSetHash);
+  assert.equal(a.particleSourceHash, b.particleSourceHash);
+  assert.equal(a.scalarSourceHash, b.scalarSourceHash);
+  assert.equal(a.flowSourceHash, b.flowSourceHash);
+  assert.equal(a.advectionSourceHash, b.advectionSourceHash);
+  assert.match(a.content, /data-layer="inspection-background"/);
+  assert.doesNotMatch(b.content, /data-layer="inspection-background"/);
+  assert.match(b.content, /data-background-mode="transparent"/);
+  assert.notEqual(a.content, b.content);
+  assert.deepEqual(opaque.finalState.particles, transparent.finalState.particles);
+  assert.deepEqual(selected(opaque), selected(transparent));
 });
 
 test('zero-step advection remains an exact no-motion derived case and still renders inspectable source/end markers', () => {
@@ -213,5 +245,9 @@ test('renderer rejects canonical/derived lineage drift, malformed layout control
   assert.throws(
     () => run(makeParticleFlowStaticSvgState(particles), 'test', graphWithRendererParams({ width: 100, height: 100, padding: 50 })),
     /particleFlowSvg\.padding must leave a positive drawable area/,
+  );
+  assert.throws(
+    () => run(makeParticleFlowStaticSvgState(particles), 'test', graphWithRendererParams({ backgroundMode: 'invented' })),
+    /particleFlowSvg\.backgroundMode must be opaque-inspection or transparent/,
   );
 });
