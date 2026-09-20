@@ -66,10 +66,10 @@ test('volumetric-light mode preserves canonical and derived ray truth while chan
     hazeWidthMultiplier: 5,
     beamWidthMultiplier: 1.8,
     hazeBlur: 7,
-    beamThreshold: 0.5,
-    coreThreshold: 0.7,
+    beamThreshold: 0.65,
+    coreThreshold: 0.82,
     tipOpacity: 0,
-    originGlowRadius: 14,
+    originGlowRadius: 8,
   });
 
   assert.equal(line.finalState.lightRaySourceHash, volume.finalState.lightRaySourceHash);
@@ -86,10 +86,10 @@ test('volumetric-light mode emits one soft volume plus selective beam/core struc
     hazeWidthMultiplier: 5,
     beamWidthMultiplier: 1.8,
     hazeBlur: 7,
-    beamThreshold: 0.5,
-    coreThreshold: 0.7,
+    beamThreshold: 0.65,
+    coreThreshold: 0.82,
     tipOpacity: 0,
-    originGlowRadius: 14,
+    originGlowRadius: 8,
   });
   const svg = view(result).content;
   const rayCount = result.finalState.lightRaySets['volumetric-fixture-rays'].rayCount;
@@ -106,7 +106,7 @@ test('volumetric-light mode emits one soft volume plus selective beam/core struc
   assert.match(svg, /data-layer="ray-beam"/);
   assert.match(svg, /data-layer="ray-core"/);
   assert.match(svg, /feGaussianBlur/);
-  assert.match(svg, /linearGradient id="axm-volume-fill"/);
+  assert.match(svg, /data-layer="ray-volume-haze"/);\n  assert.match(svg, /fill-opacity="0.038"/);
   assert.match(svg, /linearGradient id="axm-beam-0"/);
   assert.match(svg, /offset="100%"/);
   assert.ok(beamCount > 0, 'expected some visible beam rays');
