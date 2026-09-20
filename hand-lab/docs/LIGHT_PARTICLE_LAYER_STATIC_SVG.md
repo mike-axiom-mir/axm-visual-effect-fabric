@@ -1,4 +1,4 @@
-# Light + particle layer static SVG v0.1
+# Light + particle layer static SVG v0.2
 
 ## Purpose
 
@@ -15,17 +15,20 @@ The Hand reuses the existing renderers directly:
 
 Their produced SVG documents are embedded verbatim as nested SVG subdocuments. The composition Hand does not regenerate ray lines, particle trajectories, or markers and does not parse/rewrite either subrenderer output.
 
+The particle renderer is now invoked through its owning renderer-local `backgroundMode: transparent` control. Standalone particle rendering still defaults to `opaque-inspection`. This removes the known hidden-occlusion failure without changing retained particle/light truth or silently rewriting SVG bytes after the donor has rendered them.
+
 ## Truth boundary
 
 Before rendering, `validateLightParticleLayerPlan(...)` must accept the selected plan. That validator rebuilds both donor working sets from retained donor truth. The two subrenderers then perform their own lineage checks, and the composition Hand requires each produced realization to match the exact lineage recorded by the verified plan.
 
 The output is:
 
-- schema: `axm.vfx.light-particle-layer-static-svg/v0.1`
+- schema: `axm.vfx.light-particle-layer-static-svg/v0.2`
 - derived: `true`
 - replaceable: `true`
 - order authority: `verified-layer-plan-only`
 - subrealization mutation: `none`
+- particle backdrop authority: `renderer-local-only`
 - blend-mode authority: `none`
 - opacity authority: `none`
 - material authority: `none`
@@ -33,7 +36,7 @@ The output is:
 - consumer authority: `none`
 - source merge: `none`
 
-Changing renderer-local dimensions, ray stroke/opacity controls, particle padding, or marker radius changes only this disposable realization. It does not rewrite the retained light source, mask/field sources, particle/advection sources, donor working sets, or layer plan.
+Changing renderer-local dimensions, ray stroke/opacity controls, particle padding, marker radius, or the particle donor's backdrop mode changes only disposable realization. It does not rewrite retained light source, mask/field sources, particle/advection sources, donor working sets, or layer plan.
 
 ## SVG order semantics
 
@@ -42,9 +45,9 @@ The plan supports only the two already-verified order modes:
 - `rays-under-particles`
 - `particles-under-rays`
 
-The outer SVG emits the two nested subdocuments in that exact order. No blend mode, cross-layer opacity, depth model, material model, mask, clipping rule, or consumer meaning is added.
+The outer SVG emits the two nested subdocuments in that exact order. The particle subdocument is transparent in this composition, so paint order can now be visually expressed without an opaque inspection rectangle hiding the lower layer.
 
-The current particle SVG donor contains its own opaque inspection background. This compositor intentionally does **not** strip or restyle that background. Therefore `rays-under-particles` may visually obscure the ray subdocument in a browser. That is an honest replaceable-renderer limitation, not evidence that the verified effect plan is wrong and not permission to silently mutate the older donor.
+No blend mode, cross-layer opacity, depth model, material model, mask, clipping rule, or consumer meaning is added.
 
 ## Bounds and performance honesty
 
@@ -59,18 +62,16 @@ No CPU/GPU timing, FPS, memory residency, browser cost, mobile cost, battery use
 
 ## Provenance and consumer boundary
 
-External source/code reuse: **none**. This Hand only composes AXM donor outputs already in this repository. Existing light-ray and particle realizers remain independently usable and unchanged.
+External source/code reuse: **none**. This Hand only composes AXM donor outputs already in this repository. Existing light-ray and particle realizers remain independently usable.
 
 No Universal Creation, game, UI, website, software-product, or world adapter is introduced.
 
 ## Visual evidence boundary
 
-Tests verify deterministic SVG construction, exact subrenderer content reuse, layer order, lineage rejection, caller neutrality, renderer-local disposability, escaping, and budgets. CI/source inspection is not an aesthetic-quality claim.
+Tests verify deterministic SVG construction, exact subrenderer content reuse, transparent particle backdrop selection, layer order, lineage rejection, caller neutrality, renderer-local disposability, escaping, and budgets. CI/source inspection is not an aesthetic-quality claim.
 
-Unless a trustworthy raster/browser/device render of the exact produced SVG is separately inspected, compositing readability, ray visibility under the particle background, aliasing, color response, motion feel, accessibility, and aesthetic quality remain `NOT_TESTED`.
+Unless a trustworthy raster/browser/device render of the exact produced SVG is separately inspected, compositing readability, ray visibility in actual pixels, aliasing, color response, motion feel, accessibility, and aesthetic quality remain `NOT_TESTED`.
 
 ## Next bounded target
 
-This closes the structural light + particle composition chain at `verified independent donors -> verified order plan -> unchanged replaceable subrenderers -> ordered inspection SVG`.
-
-Do not add a generic compositor, shader graph, material stack, or more light/particle wrappers just to grow architecture. The next run should audit a genuinely separate VFX gap. If later pixel evidence shows that opaque-background preservation makes a required inspection case unusable, repair that as a renderer-local transparency capability in the owning particle renderer rather than changing canonical composition truth.
+The known structural occlusion blocker is repaired at the correct owner boundary. The next useful step is actual visual observation of composed fixtures if a trustworthy renderer is available; otherwise continue with a materially different higher-order composition only when it exercises already-verified donors without inventing canonical consumer meaning.
