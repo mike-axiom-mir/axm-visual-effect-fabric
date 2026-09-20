@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 export const REQUEST_SCHEMA = "axm.game-vfx-request/v1";
 export const PLAN_SCHEMA = "axm.game-vfx-plan/v1";
 export const RECEIPT_SCHEMA = "axm.game-vfx-receipt/v1";
+export const INTERRUPTION_SCHEMA = "axm.game-vfx-interruption/v1";
 
 export const EFFECT_KINDS = Object.freeze([
   "particle-burst",
@@ -248,6 +249,74 @@ export function compileRequest(request) {
   };
 }
 
+function planBody(plan) {
+  const { receipt, ...body } = plan;
+  return body;
+}
+
+function verifiedPlanHash(plan) {
+  if (plan?.schema !== PLAN_SCHEMA) throw new Error("unsupported plan schema");
+  if (plan.receipt?.schema !== RECEIPT_SCHEMA) throw new Error("plan receipt required for interruption binding");
+  const computed = digest(planBody(plan));
+  if (plan.receipt.planSha256 !== computed) throw new Error("plan receipt digest mismatch");
+  return computed;
+}
+
+function interruptionPolicy(kind) {
+  switch (kind) {
+    case "particle-burst":
+    case "particle-emitter":
+      return "stop-future-spawns-preserve-existing";
+    case "trail":
+    case "beam":
+    case "distortion-pulse":
+    case "procedural-lightning":
+      return "stop-transient";
+    case "decal":
+      return "preserve-persistent";
+    default:
+      throw new Error("unsupported effect kind: " + kind);
+  }
+}
+
+export function createInterruption(plan, absoluteTime, reason = "gameplay-interrupt") {
+  finite(absoluteTime, "absoluteTime");
+  const planSha256 = verifiedPlanHash(plan);
+  if (absoluteTime < plan.time) throw new Error("interruption cannot precede plan start");
+  if (typeof reason !== "string" || !reason.trim()) throw new Error("interruption reason required");
+
+  const interruption = {
+    schema: INTERRUPTION_SCHEMA,
+    planId: plan.id,
+    planSha256,
+    absoluteTime,
+    localTime: absoluteTime - plan.time,
+    reason,
+    policy: interruptionPolicy(plan.kind)
+  };
+
+  return {
+    ...interruption,
+    sha256: digest(interruption)
+  };
+}
+
+export function validateInterruption(plan, interruption) {
+  if (interruption?.schema !== INTERRUPTION_SCHEMA) throw new Error("unsupported interruption schema");
+  const planSha256 = verifiedPlanHash(plan);
+  if (interruption.planId !== plan.id) throw new Error("interruption plan id mismatch");
+  if (interruption.planSha256 !== planSha256) throw new Error("interruption plan digest mismatch");
+  finite(interruption.absoluteTime, "interruption.absoluteTime");
+  finite(interruption.localTime, "interruption.localTime");
+  if (interruption.absoluteTime < plan.time) throw new Error("interruption cannot precede plan start");
+  if (interruption.localTime !== interruption.absoluteTime - plan.time) throw new Error("interruption local time mismatch");
+  if (interruption.policy !== interruptionPolicy(plan.kind)) throw new Error("interruption policy mismatch");
+  if (typeof interruption.reason !== "string" || !interruption.reason.trim()) throw new Error("interruption reason required");
+  const { sha256, ...body } = interruption;
+  if (sha256 !== digest(body)) throw new Error("interruption digest mismatch");
+  return true;
+}
+
 function sampleParticle(particle, gravity, localTime) {
   const age = localTime - particle.spawnTime;
   if (age < 0 || age > particle.life) return null;
@@ -263,37 +332,49 @@ function sampleParticle(particle, gravity, localTime) {
   };
 }
 
-export function samplePlanAt(plan, absoluteTime) {
+export function samplePlanAt(plan, absoluteTime, interruption = null) {
   if (plan?.schema !== PLAN_SCHEMA) throw new Error("unsupported plan schema");
   finite(absoluteTime, "absoluteTime");
+  if (interruption) validateInterruption(plan, interruption);
   const localTime = absoluteTime - plan.time;
+  const interrupted = Boolean(interruption && absoluteTime >= interruption.absoluteTime);
 
   if (plan.kind === "particle-burst" || plan.kind === "particle-emitter") {
     const gravity = finiteVector3(plan.payload.gravity, "plan.payload.gravity");
-    const particles = plan.payload.particles
+    const scheduledParticles = interruption
+      ? plan.payload.particles.filter(particle => particle.spawnTime < interruption.localTime)
+      : plan.payload.particles;
+    const particles = scheduledParticles
       .map(particle => sampleParticle(particle, gravity, localTime))
       .filter(Boolean);
-    const lastDeath = plan.payload.particles.reduce((max, particle) => Math.max(max, particle.spawnTime + particle.life), 0);
+    const lastDeath = scheduledParticles.reduce((max, particle) => Math.max(max, particle.spawnTime + particle.life), -Infinity);
     return {
       planId: plan.id,
       kind: plan.kind,
       absoluteTime,
       localTime,
-      active: localTime >= 0 && localTime <= lastDeath,
+      active: localTime >= 0 && scheduledParticles.length > 0 && localTime <= lastDeath,
       activeCount: particles.length,
-      particles
+      particles,
+      interrupted,
+      interruptionPolicy: interruption?.policy ?? null
     };
   }
 
   const progress = clamp(localTime / plan.duration, 0, 1);
+  const naturallyActive = localTime >= 0 && localTime <= plan.duration;
+  const stoppedByInterruption = interruption?.policy === "stop-transient" && absoluteTime >= interruption.absoluteTime;
+  const active = naturallyActive && !stoppedByInterruption;
   return {
     planId: plan.id,
     kind: plan.kind,
     absoluteTime,
     localTime,
-    active: localTime >= 0 && localTime <= plan.duration,
+    active,
     progress,
-    intensity: plan.kind === "distortion-pulse" ? Math.sin(Math.PI * progress) : (localTime >= 0 && localTime <= plan.duration ? 1 : 0)
+    intensity: plan.kind === "distortion-pulse" ? (active ? Math.sin(Math.PI * progress) : 0) : (active ? 1 : 0),
+    interrupted,
+    interruptionPolicy: interruption?.policy ?? null
   };
 }
 
