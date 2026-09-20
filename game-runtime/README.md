@@ -10,6 +10,7 @@ It exists so gameplay systems can request effects without owning effect internal
 - `axm.game-vfx-plan/v1` — deterministic canonical execution plan.
 - `axm.game-vfx-receipt/v1` — replay/evidence digest.
 - `axm.game-vfx-interruption/v1` — immutable runtime interruption bound to one exact plan digest.
+- `axm.game-vfx-contact-effect-binding/v1` — one impact-style VFX request bound to an exact external hit-result receipt and contact.
 
 ## Effect families
 
@@ -25,9 +26,28 @@ Particle effects retain seeded spawn/lifetime/motion state, explicit particle bu
 
 When a requested particle count exceeds `budget.maxParticles`, the canonical plan records both the requested and retained counts plus `truncated: true`; degradation is therefore inspectable rather than silent.
 
+## Collision-contact impact binding
+
+`createContactEffectBinding(hitBinding, options)` consumes the Ability Fabric `axm.game-ability-hit-result-binding/v1` shape and produces a normal VFX request whose anchor comes from one externally supplied collision contact.
+
+The adapter intentionally supports impact-style families only: particle burst, particle emitter, decal and distortion pulse. The selected contact must provide a finite `position` and a finite non-zero `normal`.
+
+The binding preserves:
+
+- the exact hit-result binding digest;
+- the originating collision-query digest;
+- the external collision system and receipt reference;
+- the selected contact index and contact digest;
+- the original contact payload;
+- a world-contact anchor containing position, normal and optional target/collider identifiers.
+
+`compileRequest()` now carries `sourceEvidence` into the canonical plan, so the collision provenance is not dropped when the effect is compiled.
+
+This does **not** make VFX authoritative for collision truth. The adapter rejects misses, mismatched external/query hashes, modified bindings without a matching receipt, missing contacts, zero normals and unsupported effect families. A structurally valid binding still does not prove that the external collision system was physically correct.
+
 ## Cancel / interruption behavior
 
-Gameplay systems may now bind an external interruption time to an already compiled VFX plan with `createInterruption(plan, absoluteTime, reason)` and pass that immutable control record into `samplePlanAt(plan, absoluteTime, interruption)`.
+Gameplay systems may bind an external interruption time to an already compiled VFX plan with `createInterruption(plan, absoluteTime, reason)` and pass that immutable control record into `samplePlanAt(plan, absoluteTime, interruption)`.
 
 The VFX runtime does **not** decide whether gameplay is allowed to cancel an action. It only realizes the supplied interruption boundary.
 
@@ -37,7 +57,7 @@ Interruption semantics are explicit per effect family:
 - trail / beam / distortion / procedural lightning: the transient effect is inactive at and after the interruption boundary;
 - decal: already-created persistent marks keep their normal lifetime.
 
-The interruption record is bound to the exact `planSha256`, carries its own digest, and is rejected if the plan or interruption record is tampered with. The original VFX plan remains unchanged.
+The interruption record is bound to the exact `planSha256`, carries its own digest, and is rejected if the plan or interruption record is modified without a matching digest. The original VFX plan remains unchanged.
 
 These are canonical request/plan/runtime families, not claims that every target renderer already realizes them at final production quality.
 
@@ -53,4 +73,4 @@ npm run example:interrupt
 
 ## Boundary
 
-The game runtime consumes effect requests and creates deterministic canonical effect plans, interruption controls and time samples. Renderer adapters remain replaceable. Passing these tests proves structural determinism, interruption binding and bounded lifecycle behavior only; it does not prove final visual quality, artistic acceptance, balance, game feel or GPU performance.
+The game runtime consumes effect requests and creates deterministic canonical effect plans, contact-bound impact requests, interruption controls and time samples. Renderer adapters remain replaceable. Passing these tests proves structural determinism, evidence binding, interruption binding and bounded lifecycle behavior only; it does not prove external collision correctness, final visual quality, artistic acceptance, balance, game feel or GPU performance.
