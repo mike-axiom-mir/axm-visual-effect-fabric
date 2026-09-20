@@ -11,6 +11,7 @@ It exists so gameplay systems can request effects without owning effect internal
 - `axm.game-vfx-receipt/v1` — replay/evidence digest.
 - `axm.game-vfx-interruption/v1` — immutable runtime interruption bound to one exact plan digest.
 - `axm.game-vfx-contact-effect-binding/v1` — one impact-style VFX request bound to an exact external hit-result receipt and contact.
+- `axm.game-vfx-render-plan/v1` — renderer-profile adaptation bound to one exact canonical plan digest.
 
 ## Effect families
 
@@ -25,6 +26,24 @@ It exists so gameplay systems can request effects without owning effect internal
 Particle effects retain seeded spawn/lifetime/motion state, explicit particle budgets, gravity and deterministic time sampling through `samplePlanAt(plan, absoluteTime)`. This gives renderer adapters a canonical runtime state for sparks, smoke, fire-like emitters, dust and debris without making one renderer the source of truth.
 
 When a requested particle count exceeds `budget.maxParticles`, the canonical plan records both the requested and retained counts plus `truncated: true`; degradation is therefore inspectable rather than silent.
+
+## Renderer fallback profiles
+
+`adaptPlanForRenderer(plan, profile)` in `src/renderer-adapter.mjs` turns an already verified canonical VFX plan into a deterministic renderer-facing plan without modifying the canonical source plan.
+
+A renderer profile may declare supported effect kinds and explicit limits for:
+
+- particles;
+- trail samples;
+- beam segments;
+- procedural-lightning segments;
+- procedural-lightning branches.
+
+When a limit is lower than the canonical plan, the render plan records an explicit adaptation reason and keeps the original timing, anchor, source evidence and canonical plan digest. Particle and lightning reduction is deterministic and keeps the first and last scheduled/structural samples so temporal/path coverage is not silently collapsed to only the beginning of an effect.
+
+If a profile does not support an effect kind, the result is an explicit `renderable: false` render plan with an `unsupported-kind` reason. The adapter does not silently substitute a different visual effect family. This keeps renderer limitations inspectable while preserving the canonical effect plan for another renderer or later replay.
+
+Renderer adaptation is a device/runtime execution boundary, not a quality judgement. Passing its verification proves deterministic bounded degradation and source-plan integrity; it does not prove that a low-budget rendering looks good or meets a performance target on real hardware.
 
 ## Collision-contact impact binding
 
@@ -41,7 +60,7 @@ The binding preserves:
 - the original contact payload;
 - a world-contact anchor containing position, normal and optional target/collider identifiers.
 
-`compileRequest()` now carries `sourceEvidence` into the canonical plan, so the collision provenance is not dropped when the effect is compiled.
+`compileRequest()` carries `sourceEvidence` into the canonical plan, so the collision provenance is not dropped when the effect is compiled.
 
 This does **not** make VFX authoritative for collision truth. The adapter rejects misses, mismatched external/query hashes, modified bindings without a matching receipt, missing contacts, zero normals and unsupported effect families. A structurally valid binding still does not prove that the external collision system was physically correct.
 
@@ -73,4 +92,4 @@ npm run example:interrupt
 
 ## Boundary
 
-The game runtime consumes effect requests and creates deterministic canonical effect plans, contact-bound impact requests, interruption controls and time samples. Renderer adapters remain replaceable. Passing these tests proves structural determinism, evidence binding, interruption binding and bounded lifecycle behavior only; it does not prove external collision correctness, final visual quality, artistic acceptance, balance, game feel or GPU performance.
+The game runtime consumes effect requests and creates deterministic canonical effect plans, contact-bound impact requests, interruption controls, renderer-profile render plans and time samples. Renderer implementations remain replaceable. Passing these tests proves structural determinism, evidence binding, interruption binding, bounded lifecycle behavior and deterministic renderer degradation only; it does not prove external collision correctness, final visual quality, artistic acceptance, balance, game feel or GPU performance.
