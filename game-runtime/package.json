@@ -1,11 +1,12 @@
 {
   "name": "@axm/visual-effect-game-runtime",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node tests/selftest.mjs",
     "example": "node examples/attack-effects.mjs",
-    "example:smoke": "node examples/smoke-emitter.mjs"
+    "example:smoke": "node examples/smoke-emitter.mjs",
+    "example:interrupt": "node examples/interrupted-action.mjs"
   }
 }
