@@ -12,6 +12,7 @@ It exists so gameplay systems can request effects without owning effect internal
 - `axm.game-vfx-interruption/v1` — immutable runtime interruption bound to one exact plan digest.
 - `axm.game-vfx-contact-effect-binding/v1` — one impact-style VFX request bound to an exact external hit-result receipt and contact.
 - `axm.game-vfx-render-plan/v1` — renderer-profile adaptation bound to one exact canonical plan digest.
+- `axm.game-vfx-retimed-request/v1` — one action-local VFX request derived from exact Animation time-transform evidence under an explicit effect-duration policy.
 
 ## Effect families
 
@@ -26,6 +27,23 @@ It exists so gameplay systems can request effects without owning effect internal
 Particle effects retain seeded spawn/lifetime/motion state, explicit particle budgets, gravity and deterministic time sampling through `samplePlanAt(plan, absoluteTime)`. This gives renderer adapters a canonical runtime state for sparks, smoke, fire-like emitters, dust and debris without making one renderer the source of truth.
 
 When a requested particle count exceeds `budget.maxParticles`, the canonical plan records both the requested and retained counts plus `truncated: true`; degradation is therefore inspectable rather than silent.
+
+## Action retiming
+
+`deriveRetimedVfxRequest(request, animationTransform, options)` in `src/action-retime.mjs` consumes the exact `axm.animation-time-transform/v1` evidence emitted by Animation Fabric and derives a new VFX request without mutating the source request.
+
+The onset always follows the supplied action transform. For the lane's concrete 2× `arc-slash` example, a source VFX cue at `0.29` becomes `0.145`.
+
+Effect lifetime is deliberately explicit rather than silently coupled to animation speed:
+
+- `durationPolicy: "scale"` scales the canonical source-plan duration with the action, so a `0.6 s` effect becomes `0.3 s` at 2×;
+- `durationPolicy: "preserve"` moves the onset but keeps the canonical real-time duration at `0.6 s`.
+
+The derivation binds the source request hash, source canonical-plan hash, exact Animation transform, derived request hash and derived canonical-plan hash into one deterministic receipt. Requests outside the source action duration are rejected instead of being guessed into a different timeline.
+
+The `scale` policy applies to the VFX request's canonical plan duration. It does **not** silently rewrite nested artistic parameters such as particle lifetime, particle speed, renderer material behavior or other effect-family internals. Those remain independently authored unless a later explicit contract proves a justified relationship. Normalized timing curves can bind to the compiled derived plan, so their shape follows whichever explicit duration policy was chosen.
+
+This boundary consumes Animation timing evidence but does not become Animation or gameplay authority. It proves structural timing derivation only; it does not prove the retimed effect looks good, is physically plausible, performs well on a GPU, or improves game feel.
 
 ## Renderer fallback profiles
 
@@ -92,4 +110,4 @@ npm run example:interrupt
 
 ## Boundary
 
-The game runtime consumes effect requests and creates deterministic canonical effect plans, contact-bound impact requests, interruption controls, renderer-profile render plans and time samples. Renderer implementations remain replaceable. Passing these tests proves structural determinism, evidence binding, interruption binding, bounded lifecycle behavior and deterministic renderer degradation only; it does not prove external collision correctness, final visual quality, artistic acceptance, balance, game feel or GPU performance.
+The game runtime consumes effect requests and creates deterministic canonical effect plans, action-retimed request derivations, contact-bound impact requests, interruption controls, renderer-profile render plans and time samples. Renderer implementations remain replaceable. Passing these tests proves structural determinism, evidence binding, explicit action-retiming policy, interruption binding, bounded lifecycle behavior and deterministic renderer degradation only; it does not prove external collision correctness, final visual quality, artistic acceptance, balance, game feel or GPU performance.
