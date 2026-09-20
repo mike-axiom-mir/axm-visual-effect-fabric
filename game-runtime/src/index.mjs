@@ -4,6 +4,8 @@ export const REQUEST_SCHEMA = "axm.game-vfx-request/v1";
 export const PLAN_SCHEMA = "axm.game-vfx-plan/v1";
 export const RECEIPT_SCHEMA = "axm.game-vfx-receipt/v1";
 export const INTERRUPTION_SCHEMA = "axm.game-vfx-interruption/v1";
+export const ABILITY_HIT_RESULT_BINDING_SCHEMA = "axm.game-ability-hit-result-binding/v1";
+export const CONTACT_EFFECT_BINDING_SCHEMA = "axm.game-vfx-contact-effect-binding/v1";
 
 export const EFFECT_KINDS = Object.freeze([
   "particle-burst",
@@ -13,6 +15,13 @@ export const EFFECT_KINDS = Object.freeze([
   "decal",
   "distortion-pulse",
   "procedural-lightning"
+]);
+
+const CONTACT_EFFECT_KINDS = new Set([
+  "particle-burst",
+  "particle-emitter",
+  "decal",
+  "distortion-pulse"
 ]);
 
 function stable(value) {
@@ -35,6 +44,10 @@ function finiteVector3(value, label) {
   if (!Array.isArray(value) || value.length !== 3) throw new Error(label + " must be a vec3");
   value.forEach((component, index) => finite(component, `${label}[${index}]`));
   return value;
+}
+
+function nonEmptyString(value, label) {
+  if (typeof value !== "string" || !value.trim()) throw new Error(label + " must be a non-empty string");
 }
 
 function clamp(value, min, max) {
@@ -73,6 +86,9 @@ export function validateRequest(request) {
   finite(duration, "request.duration");
   if (duration <= 0) throw new Error("request.duration must be > 0");
   if (!request.anchor) throw new Error("request.anchor required");
+  if (request.sourceEvidence != null && (!request.sourceEvidence || typeof request.sourceEvidence !== "object" || Array.isArray(request.sourceEvidence))) {
+    throw new Error("request.sourceEvidence must be an object when present");
+  }
   if (request.parameters?.gravity != null) finiteVector3(request.parameters.gravity, "request.parameters.gravity");
   budgetFor(request);
   return true;
@@ -229,6 +245,7 @@ export function compileRequest(request) {
     time: request.time ?? 0,
     duration: request.duration ?? defaults.lifetime,
     anchor: structuredClone(request.anchor),
+    sourceEvidence: structuredClone(request.sourceEvidence ?? null),
     payload,
     budget,
     fallback: {
@@ -244,6 +261,130 @@ export function compileRequest(request) {
       schema: RECEIPT_SCHEMA,
       requestSha256: digest(request),
       planSha256: digest(plan),
+      deterministic: true
+    }
+  };
+}
+
+function verifiedExternalHitBinding(hitBinding) {
+  if (hitBinding?.schema !== ABILITY_HIT_RESULT_BINDING_SCHEMA) {
+    throw new Error("unsupported hit result binding schema");
+  }
+  if (!hitBinding.receipt || typeof hitBinding.receipt.sha256 !== "string") {
+    throw new Error("hit result binding receipt required");
+  }
+  const { receipt, ...body } = hitBinding;
+  const computed = digest(body);
+  if (computed !== receipt.sha256) throw new Error("hit result binding receipt mismatch");
+  if (hitBinding.hit !== true) throw new Error("hit result binding does not confirm a hit");
+  if (!Array.isArray(hitBinding.contacts) || hitBinding.contacts.length === 0) {
+    throw new Error("hit result binding requires at least one contact");
+  }
+  nonEmptyString(hitBinding.querySha256, "hitBinding.querySha256");
+  if (!hitBinding.external || typeof hitBinding.external !== "object" || Array.isArray(hitBinding.external)) {
+    throw new Error("hit result binding external evidence required");
+  }
+  if (hitBinding.external.requestSha256 !== hitBinding.querySha256) {
+    throw new Error("hit result binding query digest mismatch");
+  }
+  if (hitBinding.external.hit !== true) throw new Error("external hit evidence does not confirm a hit");
+  if (digest(hitBinding.external.contacts ?? []) !== digest(hitBinding.contacts)) {
+    throw new Error("external contacts do not match bound contacts");
+  }
+  if (!hitBinding.external.source || typeof hitBinding.external.source !== "object" || Array.isArray(hitBinding.external.source)) {
+    throw new Error("external collision source required");
+  }
+  nonEmptyString(hitBinding.external.source.system, "hitBinding.external.source.system");
+  if (hitBinding.external.source.receipt != null && typeof hitBinding.external.source.receipt !== "string") {
+    throw new Error("hitBinding.external.source.receipt must be a string when present");
+  }
+  return computed;
+}
+
+export function createContactEffectBinding(hitBinding, {
+  id,
+  kind = "particle-burst",
+  contactIndex = 0,
+  effectRef = null,
+  duration = null,
+  seed = null,
+  parameters = {},
+  budget = null,
+  rendererBinding = "unbound"
+} = {}) {
+  const hitBindingSha256 = verifiedExternalHitBinding(hitBinding);
+  nonEmptyString(id, "id");
+  if (!CONTACT_EFFECT_KINDS.has(kind)) {
+    throw new Error("contact-bound effect kind not supported: " + kind);
+  }
+  if (!Number.isInteger(contactIndex) || contactIndex < 0) {
+    throw new Error("contactIndex must be a non-negative integer");
+  }
+  const contact = hitBinding.contacts[contactIndex];
+  if (!contact || typeof contact !== "object" || Array.isArray(contact)) {
+    throw new Error("contact not found at index: " + contactIndex);
+  }
+  const position = structuredClone(finiteVector3(contact.position, "contact.position"));
+  const normal = structuredClone(finiteVector3(contact.normal, "contact.normal"));
+  if (Math.hypot(...normal) === 0) throw new Error("contact.normal must be non-zero");
+  if (parameters == null || typeof parameters !== "object" || Array.isArray(parameters)) {
+    throw new Error("parameters must be an object");
+  }
+
+  const externalSource = {
+    system: hitBinding.external.source.system,
+    receipt: hitBinding.external.source.receipt ?? null
+  };
+  const sourceEvidence = {
+    type: "external-hit-contact",
+    hitResultBindingSchema: hitBinding.schema,
+    hitResultBindingSha256: hitBindingSha256,
+    querySha256: hitBinding.querySha256,
+    externalSource,
+    contactIndex,
+    contactSha256: digest(contact),
+    contact: structuredClone(contact)
+  };
+  const anchor = {
+    type: "world-contact",
+    position,
+    normal,
+    targetId: contact.targetId ?? null,
+    colliderId: contact.colliderId ?? null
+  };
+  const request = {
+    schema: REQUEST_SCHEMA,
+    id,
+    kind,
+    time: hitBinding.sampleTime,
+    anchor,
+    parameters: structuredClone(parameters),
+    sourceEvidence,
+    rendererBinding
+  };
+  if (effectRef != null) request.effectRef = effectRef;
+  if (duration != null) request.duration = duration;
+  if (seed != null) request.seed = seed;
+  if (budget != null) request.budget = structuredClone(budget);
+  validateRequest(request);
+
+  const body = {
+    schema: CONTACT_EFFECT_BINDING_SCHEMA,
+    hitResultBindingSha256: hitBindingSha256,
+    querySha256: hitBinding.querySha256,
+    contactIndex,
+    externalSource,
+    request,
+    authority: {
+      collisionTruthOwner: false,
+      durableWorldStateOwner: false,
+      consumesExternalHitEvidence: true
+    }
+  };
+  return {
+    ...body,
+    receipt: {
+      sha256: digest(body),
       deterministic: true
     }
   };
