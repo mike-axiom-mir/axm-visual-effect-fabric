@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import {
   REQUEST_SCHEMA,
   INTERRUPTION_SCHEMA,
+  ABILITY_HIT_RESULT_BINDING_SCHEMA,
+  CONTACT_EFFECT_BINDING_SCHEMA,
+  digest,
   compileRequest,
   compileBatch,
+  createContactEffectBinding,
   createInterruption,
   validateInterruption,
   samplePlanAt
@@ -115,6 +119,100 @@ assert.deepEqual(ordered.map(x => x.id), ["a", "b"]);
 assert.equal(samplePlanAt(ordered[0], 0.28).active, true);
 assert.ok(samplePlanAt(ordered[0], 0.28).intensity > 0);
 
+function hitBinding(overrides = {}) {
+  const querySha256 = overrides.querySha256 ?? "a".repeat(64);
+  const contacts = overrides.contacts ?? [
+    {
+      position: [2.5, 1.2, -0.75],
+      normal: [0, 1, 0],
+      targetId: "enemy-7",
+      colliderId: "torso"
+    },
+    {
+      position: [2.55, 1.25, -0.7],
+      normal: [0.1, 0.99, 0],
+      targetId: "enemy-7",
+      colliderId: "shoulder"
+    }
+  ];
+  const hit = overrides.hit ?? true;
+  const body = {
+    schema: ABILITY_HIT_RESULT_BINDING_SCHEMA,
+    queryId: "arc-slash:blade-active:0.32",
+    abilityId: "arc-slash",
+    hitboxEventId: "blade-active",
+    sampleTime: 0.32,
+    querySha256,
+    hit,
+    contacts: structuredClone(contacts),
+    external: {
+      requestSha256: overrides.externalRequestSha256 ?? querySha256,
+      hit,
+      contacts: structuredClone(overrides.externalContacts ?? contacts),
+      source: {
+        system: "collision-runtime-test",
+        receipt: "collision-receipt-42"
+      }
+    },
+    authority: {
+      collisionTruthOwner: false,
+      durableWorldStateOwner: false,
+      consumesExternalCollisionReceipt: true
+    }
+  };
+  return {
+    ...body,
+    receipt: {
+      sha256: digest(body),
+      deterministic: true
+    }
+  };
+}
+
+const confirmedHit = hitBinding();
+const impactBindingA = createContactEffectBinding(confirmedHit, {
+  id: "arc-slash-impact",
+  kind: "particle-burst",
+  seed: "impact-seed",
+  parameters: { count: 18, speed: 3.5, spread: 0.4 }
+});
+const impactBindingB = createContactEffectBinding(confirmedHit, {
+  id: "arc-slash-impact",
+  kind: "particle-burst",
+  seed: "impact-seed",
+  parameters: { count: 18, speed: 3.5, spread: 0.4 }
+});
+assert.equal(impactBindingA.schema, CONTACT_EFFECT_BINDING_SCHEMA);
+assert.deepEqual(impactBindingA, impactBindingB);
+assert.equal(impactBindingA.request.time, confirmedHit.sampleTime);
+assert.deepEqual(impactBindingA.request.anchor.position, confirmedHit.contacts[0].position);
+assert.deepEqual(impactBindingA.request.anchor.normal, confirmedHit.contacts[0].normal);
+assert.equal(impactBindingA.request.anchor.targetId, "enemy-7");
+assert.equal(impactBindingA.request.sourceEvidence.hitResultBindingSha256, confirmedHit.receipt.sha256);
+assert.equal(impactBindingA.request.sourceEvidence.contactSha256, digest(confirmedHit.contacts[0]));
+
+const impactPlan = compileRequest(impactBindingA.request);
+assert.deepEqual(impactPlan.sourceEvidence, impactBindingA.request.sourceEvidence);
+assert.deepEqual(impactPlan.anchor, impactBindingA.request.anchor);
+assert.equal(impactPlan.receipt.requestSha256, digest(impactBindingA.request));
+
+const secondContactBinding = createContactEffectBinding(confirmedHit, {
+  id: "arc-slash-impact-secondary",
+  kind: "decal",
+  contactIndex: 1,
+  parameters: { size: 0.35 }
+});
+assert.deepEqual(secondContactBinding.request.anchor.position, confirmedHit.contacts[1].position);
+assert.notEqual(secondContactBinding.receipt.sha256, impactBindingA.receipt.sha256);
+
+const tamperedHit = structuredClone(confirmedHit);
+tamperedHit.contacts[0].position[0] = 99;
+assert.throws(() => createContactEffectBinding(tamperedHit, { id: "tampered-impact" }), /receipt mismatch/);
+assert.throws(() => createContactEffectBinding(hitBinding({ hit: false, contacts: [] }), { id: "miss-impact" }), /does not confirm a hit/);
+assert.throws(() => createContactEffectBinding(hitBinding({ contacts: [{ position: [0, 0, 0], normal: [0, 0, 0] }] }), { id: "zero-normal" }), /non-zero/);
+assert.throws(() => createContactEffectBinding(confirmedHit, { id: "bad-kind", kind: "beam" }), /not supported/);
+assert.throws(() => createContactEffectBinding(hitBinding({ externalRequestSha256: "b".repeat(64) }), { id: "bad-query-link" }), /query digest mismatch/);
+
 assert.throws(() => compileRequest({ schema: REQUEST_SCHEMA, id: "bad", kind: "unknown", anchor: {} }));
 assert.throws(() => compileRequest({ schema: REQUEST_SCHEMA, id: "beam", kind: "beam", anchor: {} }));
 assert.throws(() => compileRequest({ ...burst, id: "bad-gravity", parameters: { ...burst.parameters, gravity: [0, 1] } }));
@@ -123,4 +221,4 @@ assert.throws(() => createInterruption(emitter, 0.5, ""));
 assert.throws(() => createInterruption({ ...emitter, payload: { ...emitter.payload, rate: 99 } }, 0.5, "tampered-plan"));
 assert.throws(() => samplePlanAt(emitter, 0.75, { ...emitterInterruptionA, reason: "tampered" }));
 
-console.log("PASS visual-effect game runtime", a.receipt.planSha256, emitterInterruptionA.sha256);
+console.log("PASS visual-effect game runtime", a.receipt.planSha256, emitterInterruptionA.sha256, impactBindingA.receipt.sha256);
