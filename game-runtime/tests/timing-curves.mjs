@@ -66,15 +66,15 @@ assert.equal(beforeStart.channels.intensity, 0);
 assert.equal(beforeStart.channels.widthScale, 0.5);
 
 const quarter = sampleTimingCurveSetAt(slash, timingA, 0.4);
-assert.equal(quarter.progress, 0.25);
+assert.ok(Math.abs(quarter.progress - 0.25) < 1e-12);
 assert.equal(quarter.channels.intensity, 1);
 assert.equal(quarter.channels.emissive, 1.6);
 assert.equal(quarter.channels.widthScale, 0.5, "step interpolation holds left value until next key");
 
 const halfway = sampleTimingCurveSetAt(slash, timingA, 0.6);
-assert.equal(halfway.progress, 0.5);
+assert.ok(Math.abs(halfway.progress - 0.5) < 1e-12, "IEEE-754 sampling may represent an authored boundary approximately");
 assert.equal(halfway.channels.intensity, 1);
-assert.equal(halfway.channels.widthScale, 1, "exact step key resolves to authored right-hand value");
+assert.equal(halfway.channels.widthScale, 1, "authored step boundary resolves to the right-hand key despite float representation error");
 assert.ok(Math.abs(halfway.channels.emissive - (1.6 + (0 - 1.6) * (0.25 / 0.75))) < 1e-12);
 
 const late = sampleTimingCurveSetAt(slash, timingA, 0.9);
@@ -96,7 +96,7 @@ const interrupted = createInterruption(slash, 0.55, "ability-cancel");
 const combinedAfterCancel = samplePlanWithTiming(slash, timingA, 0.6, interrupted);
 assert.equal(combinedAfterCancel.active, false, "existing VFX interruption semantics remain authoritative");
 assert.equal(combinedAfterCancel.interrupted, true);
-assert.equal(combinedAfterCancel.timing.progress, 0.5, "timing sampling remains explicit even when runtime activity is stopped");
+assert.ok(Math.abs(combinedAfterCancel.timing.progress - 0.5) < 1e-12, "timing sampling remains explicit even when runtime activity is stopped");
 
 const tamperedCurveSet = structuredClone(timingA);
 tamperedCurveSet.channels.intensity.keys[1].value = 9;
