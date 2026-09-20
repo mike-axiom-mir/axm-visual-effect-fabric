@@ -40,6 +40,14 @@ function boundedInteger(value, min, max, label) {
   return number;
 }
 
+function backgroundMode(value) {
+  const mode = String(value ?? 'opaque-inspection');
+  if (!['opaque-inspection', 'transparent'].includes(mode)) {
+    throw new Error('particleFlowSvg.backgroundMode must be opaque-inspection or transparent');
+  }
+  return mode;
+}
+
 function escapeAttribute(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -177,6 +185,7 @@ export const particleFlowStaticSvgHand = hand('fx.particle.flow-static-svg-reali
   const markerRadius = bounded(params.markerRadius ?? 2.4, 0.25, 16, 'particleFlowSvg.markerRadius');
   const maxParticles = boundedInteger(params.maxParticles ?? 2048, 1, 4096, 'particleFlowSvg.maxParticles');
   const maxSamples = boundedInteger(params.maxSamples ?? 65536, 2, 262144, 'particleFlowSvg.maxSamples');
+  const resolvedBackgroundMode = backgroundMode(params.backgroundMode);
   if (selected.particleCount > maxParticles) {
     throw new Error(`particleFlowSvg particle budget exceeded: ${selected.particleCount} > ${maxParticles}`);
   }
@@ -194,7 +203,10 @@ export const particleFlowStaticSvgHand = hand('fx.particle.flow-static-svg-reali
     .map((particle) => marker(particle, 'end', width, height, padding, markerRadius))
     .join('');
 
-  const content = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" data-renderer="axm.vfx.particle-flow-static-svg/v0.1" data-particle-set-hash="${escapeAttribute(selected.particleSetHash)}"><title>AXM derived particle-flow inspection</title><rect width="100%" height="100%" fill="#071018"/><g data-layer="trajectories">${trajectoryMarkup}</g><g data-layer="starts">${startMarkup}</g><g data-layer="ends">${endMarkup}</g></svg>`;
+  const backgroundMarkup = resolvedBackgroundMode === 'opaque-inspection'
+    ? '<rect data-layer="inspection-background" width="100%" height="100%" fill="#071018"/>'
+    : '';
+  const content = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" data-renderer="axm.vfx.particle-flow-static-svg/v0.1" data-particle-set-hash="${escapeAttribute(selected.particleSetHash)}" data-background-mode="${resolvedBackgroundMode}"><title>AXM derived particle-flow inspection</title>${backgroundMarkup}<g data-layer="trajectories">${trajectoryMarkup}</g><g data-layer="starts">${startMarkup}</g><g data-layer="ends">${endMarkup}</g></svg>`;
 
   const realization = {
     mediaType: 'image/svg+xml',
@@ -210,6 +222,7 @@ export const particleFlowStaticSvgHand = hand('fx.particle.flow-static-svg-reali
     height,
     padding,
     markerRadius,
+    backgroundMode: resolvedBackgroundMode,
     content,
   };
 
@@ -232,6 +245,7 @@ export const particleFlowStaticSvgHand = hand('fx.particle.flow-static-svg-reali
       height,
       maxParticles,
       maxSamples,
+      backgroundMode: resolvedBackgroundMode,
       visualInspection: 'NOT_TESTED',
       performanceMeasurement: 'NOT_TESTED',
     },
@@ -251,7 +265,7 @@ export const PARTICLE_FLOW_STATIC_SVG_GRAPH = Object.freeze({
   stages: [
     { id: 'normalize-particle-flow-source', hand: 'fx.particle.flow-advection-source-normalize', params: {} },
     { id: 'build-flow-advected-particles', hand: 'fx.particle.flow-advection-build', params: { maxParticles: 2048, maxSamples: 65536 } },
-    { id: 'realize-particle-flow-static-svg', hand: 'fx.particle.flow-static-svg-realize', params: { width: 640, height: 420, padding: 20, markerRadius: 2.4, maxParticles: 2048, maxSamples: 65536 } },
+    { id: 'realize-particle-flow-static-svg', hand: 'fx.particle.flow-static-svg-realize', params: { width: 640, height: 420, padding: 20, markerRadius: 2.4, maxParticles: 2048, maxSamples: 65536, backgroundMode: 'opaque-inspection' } },
   ],
 });
 
