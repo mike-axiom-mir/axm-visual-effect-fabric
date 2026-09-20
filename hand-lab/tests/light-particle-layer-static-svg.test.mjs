@@ -225,10 +225,10 @@ test('compositor embeds existing light and particle SVG outputs verbatim instead
     hazeWidthMultiplier: 5,
     beamWidthMultiplier: 1.8,
     hazeBlur: 7,
-    beamThreshold: 0.5,
-    coreThreshold: 0.7,
+    beamThreshold: 0.55,
+    coreThreshold: 0.75,
     tipOpacity: 0,
-    originGlowRadius: 14,
+    originGlowRadius: 10,
   }).state.realizations.maskGuidedLightRaysStaticSvg;
   const particles = particleFlowStaticSvgHand.execute(state.particleFlowState, {
     width: 640,
