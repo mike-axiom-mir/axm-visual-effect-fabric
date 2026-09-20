@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/selftest.mjs && node tests/renderer-adapter.mjs",
+    "test": "node tests/selftest.mjs && node tests/renderer-adapter.mjs && node tests/timing-curves.mjs",
     "example": "node examples/attack-effects.mjs",
     "example:smoke": "node examples/smoke-emitter.mjs",
     "example:interrupt": "node examples/interrupted-action.mjs"
