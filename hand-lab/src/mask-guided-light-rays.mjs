@@ -333,11 +333,11 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
   const hazeWidthMultiplier = round6(bounded(params.hazeWidthMultiplier ?? 5, 1, 24, 'lightRaySvg.hazeWidthMultiplier'));
   const beamWidthMultiplier = round6(bounded(params.beamWidthMultiplier ?? 1.8, 1, 12, 'lightRaySvg.beamWidthMultiplier'));
   const hazeBlur = round6(bounded(params.hazeBlur ?? 7, 0, 32, 'lightRaySvg.hazeBlur'));
-  const beamThreshold = round6(bounded(params.beamThreshold ?? 0.5, 0, 0.95, 'lightRaySvg.beamThreshold'));
-  const coreThreshold = round6(bounded(params.coreThreshold ?? 0.7, 0, 0.95, 'lightRaySvg.coreThreshold'));
+  const beamThreshold = round6(bounded(params.beamThreshold ?? 0.55, 0, 0.95, 'lightRaySvg.beamThreshold'));
+  const coreThreshold = round6(bounded(params.coreThreshold ?? 0.75, 0, 0.95, 'lightRaySvg.coreThreshold'));
   if (coreThreshold < beamThreshold) throw new Error('lightRaySvg.coreThreshold must be >= lightRaySvg.beamThreshold');
   const tipOpacity = round6(bounded(params.tipOpacity ?? 0, 0, 0.5, 'lightRaySvg.tipOpacity'));
-  const originGlowRadius = round6(bounded(params.originGlowRadius ?? 14, 0, 256, 'lightRaySvg.originGlowRadius'));
+  const originGlowRadius = round6(bounded(params.originGlowRadius ?? 10, 0, 256, 'lightRaySvg.originGlowRadius'));
 
   const projectedRays = raySet.rays.map((ray) => ({
     ray,
@@ -363,8 +363,8 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
       const normalizedWeight = Math.max(0, Math.min(1, (entry.ray.weight - weightMin) / weightSpan));
       const beamNormalized = Math.max(0, (normalizedWeight - beamThreshold) / Math.max(EPSILON, 1 - beamThreshold));
       const coreNormalized = Math.max(0, (normalizedWeight - coreThreshold) / Math.max(EPSILON, 1 - coreThreshold));
-      const beamStrength = round6(0.03 + 0.19 * Math.pow(beamNormalized, 1.2));
-      const coreStrength = round6(0.68 * Math.pow(coreNormalized, 1.35));
+      const beamStrength = round6(0.02 + 0.14 * Math.pow(beamNormalized, 1.2));
+      const coreStrength = round6(0.58 * Math.pow(coreNormalized, 1.35));
       return {
         ...entry,
         normalizedWeight: round6(normalizedWeight),
@@ -377,14 +377,14 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
     const beamRays = visualRays.filter((entry) => entry.beamVisible);
     const coreRays = visualRays.filter((entry) => entry.coreVisible);
     const first = visualRays[0];
-    const last = visualRays.at(-1);
     const origin = first ?? { x1: width / 2, y1: height / 2 };
     const farCenter = visualRays.reduce((acc, entry) => ({
       x: acc.x + entry.x2 / visualRays.length,
       y: acc.y + entry.y2 / visualRays.length,
     }), { x: 0, y: 0 });
-    const volumePath = first && last
-      ? `M ${origin.x1} ${origin.y1} L ${first.x2} ${first.y2} L ${last.x2} ${last.y2} Z`
+    const endpointPath = visualRays.map((entry) => `L ${entry.x2} ${entry.y2}`).join(' ');
+    const volumePath = visualRays.length > 0
+      ? `M ${origin.x1} ${origin.y1} ${endpointPath} Z`
       : '';
 
     const gradientMarkup = beamRays.map((entry, index) => {
@@ -395,7 +395,7 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
     const beamLines = beamRays.map((entry, index) => `<line data-ray-index="${entry.ray.index}" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}" stroke="url(#axm-beam-${index})"/>`).join('');
     const coreLines = coreRays.map((entry, index) => `<line data-ray-index="${entry.ray.index}" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}" stroke="url(#axm-core-${index})"/>`).join('');
 
-    content = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" color="${strokeColor}" data-presentation-mode="volumetric-light" data-beam-ray-count="${beamRays.length}" data-core-ray-count="${coreRays.length}"><defs><filter id="axm-volume-haze-filter" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${hazeBlur}"/></filter><linearGradient id="axm-volume-fill" gradientUnits="userSpaceOnUse" x1="${origin.x1}" y1="${origin.y1}" x2="${round6(farCenter.x)}" y2="${round6(farCenter.y)}"><stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.035"/><stop offset="32%" stop-color="${strokeColor}" stop-opacity="0.12"/><stop offset="64%" stop-color="${strokeColor}" stop-opacity="0.075"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/></linearGradient><radialGradient id="axm-origin-glow"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.52"/><stop offset="35%" stop-color="${strokeColor}" stop-opacity="0.18"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/></radialGradient>${gradientMarkup}${coreGradientMarkup}</defs><path data-layer="ray-volume" d="${volumePath}" fill="url(#axm-volume-fill)" filter="url(#axm-volume-haze-filter)"/><circle data-layer="ray-origin-glow" cx="${origin.x1}" cy="${origin.y1}" r="${originGlowRadius}" fill="url(#axm-origin-glow)"/><g data-layer="ray-beam" fill="none" stroke-linecap="round" stroke-width="${round6(strokeWidth * beamWidthMultiplier)}">${beamLines}</g><g data-layer="ray-core" fill="none" stroke-linecap="round" stroke-width="${strokeWidth}">${coreLines}</g></svg>`;
+    content = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" color="${strokeColor}" data-presentation-mode="volumetric-light" data-beam-ray-count="${beamRays.length}" data-core-ray-count="${coreRays.length}"><defs><filter id="axm-volume-haze-filter" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${hazeBlur}"/></filter><linearGradient id="axm-volume-fill" gradientUnits="userSpaceOnUse" x1="${origin.x1}" y1="${origin.y1}" x2="${round6(farCenter.x)}" y2="${round6(farCenter.y)}"><stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.018"/><stop offset="32%" stop-color="${strokeColor}" stop-opacity="0.07"/><stop offset="64%" stop-color="${strokeColor}" stop-opacity="0.038"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/></linearGradient><radialGradient id="axm-origin-glow"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.42"/><stop offset="35%" stop-color="${strokeColor}" stop-opacity="0.14"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/></radialGradient><clipPath id="axm-ray-volume-clip"><path d="${volumePath}"/></clipPath>${gradientMarkup}${coreGradientMarkup}</defs><path data-layer="ray-volume" d="${volumePath}" fill="url(#axm-volume-fill)" filter="url(#axm-volume-haze-filter)"/><circle data-layer="ray-origin-glow" cx="${origin.x1}" cy="${origin.y1}" r="${originGlowRadius}" fill="url(#axm-origin-glow)"/><g data-layer="ray-beam" clip-path="url(#axm-ray-volume-clip)" fill="none" stroke-linecap="round" stroke-width="${round6(strokeWidth * beamWidthMultiplier)}">${beamLines}</g><g data-layer="ray-core" clip-path="url(#axm-ray-volume-clip)" fill="none" stroke-linecap="round" stroke-width="${strokeWidth}">${coreLines}</g></svg>`;
 
   }
 
