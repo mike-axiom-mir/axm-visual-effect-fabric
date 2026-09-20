@@ -45,6 +45,12 @@ function boundedInteger(value, min, max, label) {
   return number;
 }
 
+function explicitHexColor(value, label) {
+  const color = String(value ?? '').trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error(`${label} must be a #RRGGBB color`);
+  return color.toLowerCase();
+}
+
 function normalizedTurns(value, label) {
   const turns = finite(value, label);
   return round6(((turns % 1) + 1) % 1);
@@ -314,6 +320,7 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
   const minOpacity = round6(bounded(params.minOpacity ?? 0, 0, 1, 'lightRaySvg.minOpacity'));
   const maxOpacity = round6(bounded(params.maxOpacity ?? 0.85, 0, 1, 'lightRaySvg.maxOpacity'));
   if (maxOpacity < minOpacity) throw new Error('lightRaySvg.maxOpacity must be >= minOpacity');
+  const strokeColor = explicitHexColor(params.strokeColor ?? '#69d7ff', 'lightRaySvg.strokeColor');
 
   const lines = raySet.rays.map((ray) => {
     const opacity = round6(minOpacity + (maxOpacity - minOpacity) * ray.weight);
@@ -323,9 +330,9 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
     const y2 = round6(ray.end[1] * height);
     return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" opacity="${opacity}"/>`;
   }).join('');
-  const content = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><g fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round">${lines}</g></svg>`;
+  const content = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" color="${strokeColor}"><g fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round">${lines}</g></svg>`;
 
-  const renderControls = { width, height, strokeWidth, minOpacity, maxOpacity };
+  const renderControls = { width, height, strokeWidth, minOpacity, maxOpacity, strokeColor };
   const realization = {
     schema: 'axm.vfx.mask-guided-light-rays-static-svg/v0.1',
     mediaType: 'image/svg+xml',
@@ -360,6 +367,7 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
       strokeWidth,
       minOpacity,
       maxOpacity,
+      strokeColor,
       performanceMeasurement: 'NOT_TESTED',
       visualInspection: 'NOT_TESTED',
     },
@@ -391,7 +399,7 @@ export const MASK_GUIDED_LIGHT_RAY_GRAPH = Object.freeze({
     { id: 'normalize-coverage-mask-source', hand: 'fx.field.coverage-mask-source-normalize', params: {} },
     { id: 'normalize-light-ray-source', hand: 'fx.light.mask-guided-ray-source-normalize', params: {} },
     { id: 'build-light-ray-set', hand: 'fx.light.mask-guided-ray-set-build', params: { rayCount: 64, samplesPerRay: 24, maxRays: 256, maxSamples: 32768 } },
-    { id: 'realize-static-svg', hand: 'fx.light.mask-guided-rays-static-svg-realize', params: { width: 640, height: 420, strokeWidth: 1.5, minOpacity: 0, maxOpacity: 0.85 } },
+    { id: 'realize-static-svg', hand: 'fx.light.mask-guided-rays-static-svg-realize', params: { width: 640, height: 420, strokeWidth: 1.5, minOpacity: 0, maxOpacity: 0.85, strokeColor: '#69d7ff' } },
   ],
 });
 
