@@ -168,6 +168,8 @@ export const realizeLightParticleLayerStaticSvgHand = hand('fx.composition.light
   const lightStrokeWidth = bounded(params.lightStrokeWidth ?? 1.5, 0.1, 16, 'lightParticleSvg.lightStrokeWidth');
   const lightMinOpacity = bounded(params.lightMinOpacity ?? 0, 0, 1, 'lightParticleSvg.lightMinOpacity');
   const lightMaxOpacity = bounded(params.lightMaxOpacity ?? 0.85, 0, 1, 'lightParticleSvg.lightMaxOpacity');
+  const lightStrokeColor = String(params.lightStrokeColor ?? '#69d7ff').trim().toLowerCase();
+  if (!/^#[0-9a-f]{6}$/.test(lightStrokeColor)) throw new Error('lightParticleSvg.lightStrokeColor must be a #RRGGBB color');
   if (lightMaxOpacity < lightMinOpacity) {
     throw new Error('lightParticleSvg.lightMaxOpacity must be >= lightMinOpacity');
   }
@@ -186,6 +188,7 @@ export const realizeLightParticleLayerStaticSvgHand = hand('fx.composition.light
     strokeWidth: lightStrokeWidth,
     minOpacity: lightMinOpacity,
     maxOpacity: lightMaxOpacity,
+    strokeColor: lightStrokeColor,
   });
   const particleResult = particleFlowStaticSvgHand.execute(next.particleFlowState, {
     width,
@@ -234,6 +237,7 @@ export const realizeLightParticleLayerStaticSvgHand = hand('fx.composition.light
     lightStrokeWidth,
     lightMinOpacity,
     lightMaxOpacity,
+    lightStrokeColor,
     particlePadding,
     particleMarkerRadius,
     maxParticles,
@@ -310,6 +314,7 @@ export const LIGHT_PARTICLE_LAYER_STATIC_SVG_GRAPH = Object.freeze({
         lightStrokeWidth: 1.5,
         lightMinOpacity: 0,
         lightMaxOpacity: 0.85,
+        lightStrokeColor: '#69d7ff',
         particlePadding: 20,
         particleMarkerRadius: 2.4,
         maxParticles: 2048,
