@@ -190,6 +190,11 @@ test('composite static SVG is caller-neutral, derived/replaceable and preserves 
   assert.equal(view.semantics.particleBackdropAuthority, 'renderer-local-only');
   assert.equal(view.renderControls.particleBackgroundMode, 'transparent');
   assert.equal(view.renderer, 'axm.vfx.light-particle-layer-static-svg/v0.2');
+  assert.equal(view.renderControls.lightPresentationMode, 'volumetric-light');
+  assert.match(view.content, /data-presentation-mode="volumetric-light"/);
+  assert.match(view.content, /data-layer="ray-haze"/);
+  assert.match(view.content, /data-layer="ray-beam"/);
+  assert.match(view.content, /data-layer="ray-core"/);
 });
 
 test('verified plan order alone controls subrealization paint order while both subrender hashes stay unchanged', () => {
@@ -215,6 +220,14 @@ test('compositor embeds existing light and particle SVG outputs verbatim instead
     strokeWidth: 1.5,
     minOpacity: 0,
     maxOpacity: 0.85,
+    strokeColor: '#69d7ff',
+    presentationMode: 'volumetric-light',
+    hazeWidthMultiplier: 7.5,
+    beamWidthMultiplier: 2.8,
+    hazeBlur: 3.8,
+    coreThreshold: 0.58,
+    tipOpacity: 0.035,
+    originGlowRadius: 30,
   }).state.realizations.maskGuidedLightRaysStaticSvg;
   const particles = particleFlowStaticSvgHand.execute(state.particleFlowState, {
     width: 640,
