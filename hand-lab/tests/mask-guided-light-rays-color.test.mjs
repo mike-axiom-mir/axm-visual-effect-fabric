@@ -58,7 +58,6 @@ test('light-ray SVG binds an explicit default color instead of relying on host v
   assert.equal(view.renderControls.strokeColor, '#69d7ff');
   assert.match(view.content, /color="#69d7ff"/);
   assert.match(view.content, /stroke="currentColor"/);
-  assert.doesNotMatch(view.content, /<svg[^>]*?(?<!color="#69d7ff")>/);
 });
 
 test('renderer-local light color changes output without rewriting ray source or derived ray geometry', () => {
