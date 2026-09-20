@@ -106,7 +106,8 @@ test('volumetric-light mode emits one soft volume plus selective beam/core struc
   assert.match(svg, /data-layer="ray-beam"/);
   assert.match(svg, /data-layer="ray-core"/);
   assert.match(svg, /feGaussianBlur/);
-  assert.match(svg, /data-layer="ray-volume-haze"/);\n  assert.match(svg, /fill-opacity="0.038"/);
+  assert.match(svg, /data-layer="ray-volume-haze"/);
+  assert.match(svg, /fill-opacity="0.038"/);
   assert.match(svg, /linearGradient id="axm-beam-0"/);
   assert.match(svg, /offset="100%"/);
   assert.ok(beamCount > 0, 'expected some visible beam rays');
