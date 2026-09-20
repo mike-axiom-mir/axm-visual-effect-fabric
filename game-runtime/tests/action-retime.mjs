@@ -37,6 +37,10 @@ function makeTransform() {
   };
 }
 
+function near(actual, expected, epsilon = 1e-12) {
+  assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} != ${expected}`);
+}
+
 const sourceRequest = {
   schema: REQUEST_SCHEMA,
   id: "arc-slash:slash-sparks",
@@ -62,12 +66,12 @@ const scaled = deriveRetimedVfxRequest(sourceRequest, transform, {
   durationPolicy: "scale"
 });
 assert.equal(scaled.schema, RETIMED_VFX_REQUEST_SCHEMA);
-assert.equal(scaled.request.time, 0.145);
-assert.equal(scaled.request.duration, 0.3);
-assert.equal(scaled.timing.sourceTime, 0.29);
-assert.equal(scaled.timing.outputTime, 0.145);
-assert.equal(scaled.timing.sourceDuration, 0.6);
-assert.equal(scaled.timing.outputDuration, 0.3);
+near(scaled.request.time, 0.145);
+near(scaled.request.duration, 0.3);
+near(scaled.timing.sourceTime, 0.29);
+near(scaled.timing.outputTime, 0.145);
+near(scaled.timing.sourceDuration, 0.6);
+near(scaled.timing.outputDuration, 0.3);
 assert.equal(scaled.policy.duration, "scale");
 assert.equal(scaled.authority.animationTimingOwner, false);
 assert.equal(scaled.authority.gameplayTimingOwner, false);
@@ -75,8 +79,8 @@ assert.deepEqual(sourceRequest, sourceSnapshot);
 assert.equal(validateRetimedVfxRequest(scaled, { sourceRequest }), true);
 
 const scaledPlan = compileRequest(scaled.request);
-assert.equal(scaledPlan.time, 0.145);
-assert.equal(scaledPlan.duration, 0.3);
+near(scaledPlan.time, 0.145);
+near(scaledPlan.duration, 0.3);
 assert.equal(scaledPlan.receipt.planSha256, scaled.derivedPlanSha256);
 
 const envelope = createTimingCurveSet(scaledPlan, {
@@ -94,16 +98,16 @@ const quarter = sampleTimingCurveSetAt(
   envelope,
   scaledPlan.time + scaledPlan.duration * 0.25
 );
-assert.equal(quarter.progress, 0.25);
-assert.equal(quarter.channels.intensity, 1);
+near(quarter.progress, 0.25);
+near(quarter.channels.intensity, 1);
 
 const preserved = deriveRetimedVfxRequest(sourceRequest, transform, {
   id: "arc-slash-fast:slash-sparks-preserved",
   durationPolicy: "preserve"
 });
-assert.equal(preserved.request.time, 0.145);
-assert.equal(preserved.request.duration, 0.6);
-assert.equal(preserved.timing.outputDuration, 0.6);
+near(preserved.request.time, 0.145);
+near(preserved.request.duration, 0.6);
+near(preserved.timing.outputDuration, 0.6);
 assert.equal(validateRetimedVfxRequest(preserved, { sourceRequest }), true);
 
 const scaledReplay = deriveRetimedVfxRequest(sourceRequest, transform, {
@@ -123,9 +127,9 @@ const defaultDurationRequest = {
 const defaultScaled = deriveRetimedVfxRequest(defaultDurationRequest, transform, {
   id: "arc-slash-fast:weapon-trail"
 });
-assert.equal(compileRequest(defaultDurationRequest).duration, 0.3);
-assert.equal(defaultScaled.request.duration, 0.15);
-assert.equal(defaultScaled.request.time, 0.1);
+near(compileRequest(defaultDurationRequest).duration, 0.3);
+near(defaultScaled.request.duration, 0.15);
+near(defaultScaled.request.time, 0.1);
 assert.equal(validateRetimedVfxRequest(defaultScaled, { sourceRequest: defaultDurationRequest }), true);
 
 const tamperedTransform = structuredClone(transform);
