@@ -51,6 +51,14 @@ function explicitHexColor(value, label) {
   return color.toLowerCase();
 }
 
+function lightPresentationMode(value) {
+  const mode = String(value ?? 'line-inspection').trim();
+  if (!['line-inspection', 'volumetric-light'].includes(mode)) {
+    throw new Error('lightRaySvg.presentationMode must be line-inspection or volumetric-light');
+  }
+  return mode;
+}
+
 function normalizedTurns(value, label) {
   const turns = finite(value, label);
   return round6(((turns % 1) + 1) % 1);
@@ -321,18 +329,73 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
   const maxOpacity = round6(bounded(params.maxOpacity ?? 0.85, 0, 1, 'lightRaySvg.maxOpacity'));
   if (maxOpacity < minOpacity) throw new Error('lightRaySvg.maxOpacity must be >= minOpacity');
   const strokeColor = explicitHexColor(params.strokeColor ?? '#69d7ff', 'lightRaySvg.strokeColor');
+  const presentationMode = lightPresentationMode(params.presentationMode);
+  const hazeWidthMultiplier = round6(bounded(params.hazeWidthMultiplier ?? 7.5, 1, 24, 'lightRaySvg.hazeWidthMultiplier'));
+  const beamWidthMultiplier = round6(bounded(params.beamWidthMultiplier ?? 2.8, 1, 12, 'lightRaySvg.beamWidthMultiplier'));
+  const hazeBlur = round6(bounded(params.hazeBlur ?? 3.8, 0, 32, 'lightRaySvg.hazeBlur'));
+  const coreThreshold = round6(bounded(params.coreThreshold ?? 0.58, 0, 0.95, 'lightRaySvg.coreThreshold'));
+  const tipOpacity = round6(bounded(params.tipOpacity ?? 0.035, 0, 0.5, 'lightRaySvg.tipOpacity'));
+  const originGlowRadius = round6(bounded(params.originGlowRadius ?? 30, 0, 256, 'lightRaySvg.originGlowRadius'));
 
-  const lines = raySet.rays.map((ray) => {
-    const opacity = round6(minOpacity + (maxOpacity - minOpacity) * ray.weight);
-    const x1 = round6(ray.start[0] * width);
-    const y1 = round6(ray.start[1] * height);
-    const x2 = round6(ray.end[0] * width);
-    const y2 = round6(ray.end[1] * height);
-    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" opacity="${opacity}"/>`;
-  }).join('');
-  const content = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" color="${strokeColor}"><g fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round">${lines}</g></svg>`;
+  const projectedRays = raySet.rays.map((ray) => ({
+    ray,
+    x1: round6(ray.start[0] * width),
+    y1: round6(ray.start[1] * height),
+    x2: round6(ray.end[0] * width),
+    y2: round6(ray.end[1] * height),
+  }));
 
-  const renderControls = { width, height, strokeWidth, minOpacity, maxOpacity, strokeColor };
+  let content;
+  if (presentationMode === 'line-inspection') {
+    const lines = projectedRays.map(({ ray, x1, y1, x2, y2 }) => {
+      const opacity = round6(minOpacity + (maxOpacity - minOpacity) * ray.weight);
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" opacity="${opacity}"/>`;
+    }).join('');
+    content = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" color="${strokeColor}" data-presentation-mode="line-inspection"><g fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round">${lines}</g></svg>`;
+  } else {
+    const weights = raySet.rays.map((ray) => ray.weight);
+    const weightMin = Math.min(...weights);
+    const weightMax = Math.max(...weights);
+    const weightSpan = Math.max(EPSILON, weightMax - weightMin);
+    const visualRays = projectedRays.map((entry) => {
+      const normalizedWeight = Math.max(0, Math.min(1, (entry.ray.weight - weightMin) / weightSpan));
+      const hazeStrength = round6(0.035 + 0.17 * Math.sqrt(normalizedWeight));
+      const beamStrength = round6(0.02 + 0.43 * Math.pow(normalizedWeight, 1.15));
+      const coreNormalized = Math.max(0, (normalizedWeight - coreThreshold) / Math.max(EPSILON, 1 - coreThreshold));
+      const coreStrength = round6(0.78 * Math.pow(coreNormalized, 1.35));
+      return { ...entry, normalizedWeight: round6(normalizedWeight), hazeStrength, beamStrength, coreStrength };
+    });
+    const gradientMarkup = visualRays.map((entry, index) => {
+      const hazeTip = round6(entry.hazeStrength * tipOpacity);
+      const beamTip = round6(entry.beamStrength * tipOpacity * 0.5);
+      const coreTip = 0;
+      return `<linearGradient id="axm-haze-${index}" gradientUnits="userSpaceOnUse" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}"><stop offset="0%" stop-color="${strokeColor}" stop-opacity="${round6(entry.hazeStrength * 0.62)}"/><stop offset="38%" stop-color="${strokeColor}" stop-opacity="${entry.hazeStrength}"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="${hazeTip}"/></linearGradient><linearGradient id="axm-beam-${index}" gradientUnits="userSpaceOnUse" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}"><stop offset="0%" stop-color="${strokeColor}" stop-opacity="${round6(entry.beamStrength * 0.72)}"/><stop offset="48%" stop-color="${strokeColor}" stop-opacity="${entry.beamStrength}"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="${beamTip}"/></linearGradient>${entry.coreStrength > 0 ? `<linearGradient id="axm-core-${index}" gradientUnits="userSpaceOnUse" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}"><stop offset="0%" stop-color="#ffffff" stop-opacity="${round6(entry.coreStrength * 0.82)}"/><stop offset="42%" stop-color="#d9f7ff" stop-opacity="${entry.coreStrength}"/><stop offset="82%" stop-color="${strokeColor}" stop-opacity="${round6(entry.coreStrength * 0.46)}"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="${coreTip}"/></linearGradient>` : ''}`;
+    }).join('');
+    const hazeLines = visualRays.map((entry, index) => `<line data-ray-index="${index}" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}" stroke="url(#axm-haze-${index})"/>`).join('');
+    const beamLines = visualRays.map((entry, index) => `<line data-ray-index="${index}" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}" stroke="url(#axm-beam-${index})"/>`).join('');
+    const coreLines = visualRays.map((entry, index) => entry.coreStrength > 0
+      ? `<line data-ray-index="${index}" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}" stroke="url(#axm-core-${index})"/>`
+      : '').join('');
+    const origin = projectedRays[0] ?? { x1: width / 2, y1: height / 2 };
+    const coreCount = visualRays.filter((entry) => entry.coreStrength > 0).length;
+    content = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" color="${strokeColor}" data-presentation-mode="volumetric-light" data-core-ray-count="${coreCount}"><defs><filter id="axm-ray-haze-filter" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="${hazeBlur}"/></filter><radialGradient id="axm-origin-glow"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.82"/><stop offset="28%" stop-color="${strokeColor}" stop-opacity="0.38"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/></radialGradient>${gradientMarkup}</defs><circle data-layer="ray-origin-glow" cx="${origin.x1}" cy="${origin.y1}" r="${originGlowRadius}" fill="url(#axm-origin-glow)"/><g data-layer="ray-haze" fill="none" stroke-linecap="round" stroke-width="${round6(strokeWidth * hazeWidthMultiplier)}" filter="url(#axm-ray-haze-filter)">${hazeLines}</g><g data-layer="ray-beam" fill="none" stroke-linecap="round" stroke-width="${round6(strokeWidth * beamWidthMultiplier)}">${beamLines}</g><g data-layer="ray-core" fill="none" stroke-linecap="round" stroke-width="${strokeWidth}">${coreLines}</g></svg>`;
+  }
+
+  const renderControls = {
+    width,
+    height,
+    strokeWidth,
+    minOpacity,
+    maxOpacity,
+    strokeColor,
+    presentationMode,
+    hazeWidthMultiplier,
+    beamWidthMultiplier,
+    hazeBlur,
+    coreThreshold,
+    tipOpacity,
+    originGlowRadius,
+  };
   const realization = {
     schema: 'axm.vfx.mask-guided-light-rays-static-svg/v0.1',
     mediaType: 'image/svg+xml',
@@ -368,6 +431,13 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
       minOpacity,
       maxOpacity,
       strokeColor,
+      presentationMode,
+      hazeWidthMultiplier,
+      beamWidthMultiplier,
+      hazeBlur,
+      coreThreshold,
+      tipOpacity,
+      originGlowRadius,
       performanceMeasurement: 'NOT_TESTED',
       visualInspection: 'NOT_TESTED',
     },
