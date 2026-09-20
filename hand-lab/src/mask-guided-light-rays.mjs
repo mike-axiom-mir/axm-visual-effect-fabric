@@ -330,12 +330,14 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
   if (maxOpacity < minOpacity) throw new Error('lightRaySvg.maxOpacity must be >= minOpacity');
   const strokeColor = explicitHexColor(params.strokeColor ?? '#69d7ff', 'lightRaySvg.strokeColor');
   const presentationMode = lightPresentationMode(params.presentationMode);
-  const hazeWidthMultiplier = round6(bounded(params.hazeWidthMultiplier ?? 7.5, 1, 24, 'lightRaySvg.hazeWidthMultiplier'));
-  const beamWidthMultiplier = round6(bounded(params.beamWidthMultiplier ?? 2.8, 1, 12, 'lightRaySvg.beamWidthMultiplier'));
-  const hazeBlur = round6(bounded(params.hazeBlur ?? 3.8, 0, 32, 'lightRaySvg.hazeBlur'));
-  const coreThreshold = round6(bounded(params.coreThreshold ?? 0.58, 0, 0.95, 'lightRaySvg.coreThreshold'));
-  const tipOpacity = round6(bounded(params.tipOpacity ?? 0.035, 0, 0.5, 'lightRaySvg.tipOpacity'));
-  const originGlowRadius = round6(bounded(params.originGlowRadius ?? 30, 0, 256, 'lightRaySvg.originGlowRadius'));
+  const hazeWidthMultiplier = round6(bounded(params.hazeWidthMultiplier ?? 5, 1, 24, 'lightRaySvg.hazeWidthMultiplier'));
+  const beamWidthMultiplier = round6(bounded(params.beamWidthMultiplier ?? 1.8, 1, 12, 'lightRaySvg.beamWidthMultiplier'));
+  const hazeBlur = round6(bounded(params.hazeBlur ?? 7, 0, 32, 'lightRaySvg.hazeBlur'));
+  const beamThreshold = round6(bounded(params.beamThreshold ?? 0.5, 0, 0.95, 'lightRaySvg.beamThreshold'));
+  const coreThreshold = round6(bounded(params.coreThreshold ?? 0.7, 0, 0.95, 'lightRaySvg.coreThreshold'));
+  if (coreThreshold < beamThreshold) throw new Error('lightRaySvg.coreThreshold must be >= lightRaySvg.beamThreshold');
+  const tipOpacity = round6(bounded(params.tipOpacity ?? 0, 0, 0.5, 'lightRaySvg.tipOpacity'));
+  const originGlowRadius = round6(bounded(params.originGlowRadius ?? 14, 0, 256, 'lightRaySvg.originGlowRadius'));
 
   const projectedRays = raySet.rays.map((ray) => ({
     ray,
@@ -359,26 +361,42 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
     const weightSpan = Math.max(EPSILON, weightMax - weightMin);
     const visualRays = projectedRays.map((entry) => {
       const normalizedWeight = Math.max(0, Math.min(1, (entry.ray.weight - weightMin) / weightSpan));
-      const hazeStrength = round6(0.035 + 0.17 * Math.sqrt(normalizedWeight));
-      const beamStrength = round6(0.02 + 0.43 * Math.pow(normalizedWeight, 1.15));
+      const beamNormalized = Math.max(0, (normalizedWeight - beamThreshold) / Math.max(EPSILON, 1 - beamThreshold));
       const coreNormalized = Math.max(0, (normalizedWeight - coreThreshold) / Math.max(EPSILON, 1 - coreThreshold));
-      const coreStrength = round6(0.78 * Math.pow(coreNormalized, 1.35));
-      return { ...entry, normalizedWeight: round6(normalizedWeight), hazeStrength, beamStrength, coreStrength };
+      const beamStrength = round6(0.03 + 0.19 * Math.pow(beamNormalized, 1.2));
+      const coreStrength = round6(0.68 * Math.pow(coreNormalized, 1.35));
+      return {
+        ...entry,
+        normalizedWeight: round6(normalizedWeight),
+        beamStrength,
+        coreStrength,
+        beamVisible: normalizedWeight >= beamThreshold,
+        coreVisible: normalizedWeight >= coreThreshold,
+      };
     });
-    const gradientMarkup = visualRays.map((entry, index) => {
-      const hazeTip = round6(entry.hazeStrength * tipOpacity);
-      const beamTip = round6(entry.beamStrength * tipOpacity * 0.5);
-      const coreTip = 0;
-      return `<linearGradient id="axm-haze-${index}" gradientUnits="userSpaceOnUse" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}"><stop offset="0%" stop-color="${strokeColor}" stop-opacity="${round6(entry.hazeStrength * 0.62)}"/><stop offset="38%" stop-color="${strokeColor}" stop-opacity="${entry.hazeStrength}"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="${hazeTip}"/></linearGradient><linearGradient id="axm-beam-${index}" gradientUnits="userSpaceOnUse" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}"><stop offset="0%" stop-color="${strokeColor}" stop-opacity="${round6(entry.beamStrength * 0.72)}"/><stop offset="48%" stop-color="${strokeColor}" stop-opacity="${entry.beamStrength}"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="${beamTip}"/></linearGradient>${entry.coreStrength > 0 ? `<linearGradient id="axm-core-${index}" gradientUnits="userSpaceOnUse" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}"><stop offset="0%" stop-color="#ffffff" stop-opacity="${round6(entry.coreStrength * 0.82)}"/><stop offset="42%" stop-color="#d9f7ff" stop-opacity="${entry.coreStrength}"/><stop offset="82%" stop-color="${strokeColor}" stop-opacity="${round6(entry.coreStrength * 0.46)}"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="${coreTip}"/></linearGradient>` : ''}`;
+    const beamRays = visualRays.filter((entry) => entry.beamVisible);
+    const coreRays = visualRays.filter((entry) => entry.coreVisible);
+    const first = visualRays[0];
+    const last = visualRays.at(-1);
+    const origin = first ?? { x1: width / 2, y1: height / 2 };
+    const farCenter = visualRays.reduce((acc, entry) => ({
+      x: acc.x + entry.x2 / visualRays.length,
+      y: acc.y + entry.y2 / visualRays.length,
+    }), { x: 0, y: 0 });
+    const volumePath = first && last
+      ? `M ${origin.x1} ${origin.y1} L ${first.x2} ${first.y2} L ${last.x2} ${last.y2} Z`
+      : '';
+
+    const gradientMarkup = beamRays.map((entry, index) => {
+      const beamTip = round6(entry.beamStrength * tipOpacity);
+      return `<linearGradient id="axm-beam-${index}" gradientUnits="userSpaceOnUse" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}"><stop offset="0%" stop-color="${strokeColor}" stop-opacity="${round6(entry.beamStrength * 0.08)}"/><stop offset="34%" stop-color="${strokeColor}" stop-opacity="${round6(entry.beamStrength * 0.62)}"/><stop offset="55%" stop-color="${strokeColor}" stop-opacity="${entry.beamStrength}"/><stop offset="82%" stop-color="${strokeColor}" stop-opacity="${round6(entry.beamStrength * 0.28)}"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="${beamTip}"/></linearGradient>`;
     }).join('');
-    const hazeLines = visualRays.map((entry, index) => `<line data-ray-index="${index}" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}" stroke="url(#axm-haze-${index})"/>`).join('');
-    const beamLines = visualRays.map((entry, index) => `<line data-ray-index="${index}" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}" stroke="url(#axm-beam-${index})"/>`).join('');
-    const coreLines = visualRays.map((entry, index) => entry.coreStrength > 0
-      ? `<line data-ray-index="${index}" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}" stroke="url(#axm-core-${index})"/>`
-      : '').join('');
-    const origin = projectedRays[0] ?? { x1: width / 2, y1: height / 2 };
-    const coreCount = visualRays.filter((entry) => entry.coreStrength > 0).length;
-    content = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" color="${strokeColor}" data-presentation-mode="volumetric-light" data-core-ray-count="${coreCount}"><defs><filter id="axm-ray-haze-filter" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="${hazeBlur}"/></filter><radialGradient id="axm-origin-glow"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.82"/><stop offset="28%" stop-color="${strokeColor}" stop-opacity="0.38"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/></radialGradient>${gradientMarkup}</defs><circle data-layer="ray-origin-glow" cx="${origin.x1}" cy="${origin.y1}" r="${originGlowRadius}" fill="url(#axm-origin-glow)"/><g data-layer="ray-haze" fill="none" stroke-linecap="round" stroke-width="${round6(strokeWidth * hazeWidthMultiplier)}" filter="url(#axm-ray-haze-filter)">${hazeLines}</g><g data-layer="ray-beam" fill="none" stroke-linecap="round" stroke-width="${round6(strokeWidth * beamWidthMultiplier)}">${beamLines}</g><g data-layer="ray-core" fill="none" stroke-linecap="round" stroke-width="${strokeWidth}">${coreLines}</g></svg>`;
+    const coreGradientMarkup = coreRays.map((entry, index) => `<linearGradient id="axm-core-${index}" gradientUnits="userSpaceOnUse" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}"><stop offset="0%" stop-color="#ffffff" stop-opacity="${round6(entry.coreStrength * 0.08)}"/><stop offset="38%" stop-color="#dff9ff" stop-opacity="${round6(entry.coreStrength * 0.72)}"/><stop offset="56%" stop-color="#ffffff" stop-opacity="${entry.coreStrength}"/><stop offset="80%" stop-color="${strokeColor}" stop-opacity="${round6(entry.coreStrength * 0.32)}"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/></linearGradient>`).join('');
+    const beamLines = beamRays.map((entry, index) => `<line data-ray-index="${entry.ray.index}" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}" stroke="url(#axm-beam-${index})"/>`).join('');
+    const coreLines = coreRays.map((entry, index) => `<line data-ray-index="${entry.ray.index}" x1="${entry.x1}" y1="${entry.y1}" x2="${entry.x2}" y2="${entry.y2}" stroke="url(#axm-core-${index})"/>`).join('');
+
+    content = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" color="${strokeColor}" data-presentation-mode="volumetric-light" data-beam-ray-count="${beamRays.length}" data-core-ray-count="${coreRays.length}"><defs><filter id="axm-volume-haze-filter" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${hazeBlur}"/></filter><linearGradient id="axm-volume-fill" gradientUnits="userSpaceOnUse" x1="${origin.x1}" y1="${origin.y1}" x2="${round6(farCenter.x)}" y2="${round6(farCenter.y)}"><stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.035"/><stop offset="32%" stop-color="${strokeColor}" stop-opacity="0.12"/><stop offset="64%" stop-color="${strokeColor}" stop-opacity="0.075"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/></linearGradient><radialGradient id="axm-origin-glow"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.52"/><stop offset="35%" stop-color="${strokeColor}" stop-opacity="0.18"/><stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/></radialGradient>${gradientMarkup}${coreGradientMarkup}</defs><path data-layer="ray-volume" d="${volumePath}" fill="url(#axm-volume-fill)" filter="url(#axm-volume-haze-filter)"/><circle data-layer="ray-origin-glow" cx="${origin.x1}" cy="${origin.y1}" r="${originGlowRadius}" fill="url(#axm-origin-glow)"/><g data-layer="ray-beam" fill="none" stroke-linecap="round" stroke-width="${round6(strokeWidth * beamWidthMultiplier)}">${beamLines}</g><g data-layer="ray-core" fill="none" stroke-linecap="round" stroke-width="${strokeWidth}">${coreLines}</g></svg>`;
+
   }
 
   const renderControls = {
@@ -392,6 +410,7 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
     hazeWidthMultiplier,
     beamWidthMultiplier,
     hazeBlur,
+    beamThreshold,
     coreThreshold,
     tipOpacity,
     originGlowRadius,
@@ -435,6 +454,7 @@ export const realizeMaskGuidedLightRaysStaticSvgHand = hand('fx.light.mask-guide
       hazeWidthMultiplier,
       beamWidthMultiplier,
       hazeBlur,
+      beamThreshold,
       coreThreshold,
       tipOpacity,
       originGlowRadius,
