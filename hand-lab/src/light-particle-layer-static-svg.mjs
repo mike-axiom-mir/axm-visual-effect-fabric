@@ -177,11 +177,11 @@ export const realizeLightParticleLayerStaticSvgHand = hand('fx.composition.light
   const lightHazeWidthMultiplier = bounded(params.lightHazeWidthMultiplier ?? 5, 1, 24, 'lightParticleSvg.lightHazeWidthMultiplier');
   const lightBeamWidthMultiplier = bounded(params.lightBeamWidthMultiplier ?? 1.8, 1, 12, 'lightParticleSvg.lightBeamWidthMultiplier');
   const lightHazeBlur = bounded(params.lightHazeBlur ?? 7, 0, 32, 'lightParticleSvg.lightHazeBlur');
-  const lightBeamThreshold = bounded(params.lightBeamThreshold ?? 0.55, 0, 0.95, 'lightParticleSvg.lightBeamThreshold');
-  const lightCoreThreshold = bounded(params.lightCoreThreshold ?? 0.75, 0, 0.95, 'lightParticleSvg.lightCoreThreshold');
+  const lightBeamThreshold = bounded(params.lightBeamThreshold ?? 0.65, 0, 0.95, 'lightParticleSvg.lightBeamThreshold');
+  const lightCoreThreshold = bounded(params.lightCoreThreshold ?? 0.82, 0, 0.95, 'lightParticleSvg.lightCoreThreshold');
   if (lightCoreThreshold < lightBeamThreshold) throw new Error('lightParticleSvg.lightCoreThreshold must be >= lightParticleSvg.lightBeamThreshold');
   const lightTipOpacity = bounded(params.lightTipOpacity ?? 0, 0, 0.5, 'lightParticleSvg.lightTipOpacity');
-  const lightOriginGlowRadius = bounded(params.lightOriginGlowRadius ?? 10, 0, 256, 'lightParticleSvg.lightOriginGlowRadius');
+  const lightOriginGlowRadius = bounded(params.lightOriginGlowRadius ?? 8, 0, 256, 'lightParticleSvg.lightOriginGlowRadius');
   if (lightMaxOpacity < lightMinOpacity) {
     throw new Error('lightParticleSvg.lightMaxOpacity must be >= lightMinOpacity');
   }
@@ -347,10 +347,10 @@ export const LIGHT_PARTICLE_LAYER_STATIC_SVG_GRAPH = Object.freeze({
         lightHazeWidthMultiplier: 5,
         lightBeamWidthMultiplier: 1.8,
         lightHazeBlur: 7,
-        lightBeamThreshold: 0.55,
-        lightCoreThreshold: 0.75,
+        lightBeamThreshold: 0.65,
+        lightCoreThreshold: 0.82,
         lightTipOpacity: 0,
-        lightOriginGlowRadius: 10,
+        lightOriginGlowRadius: 8,
         particlePadding: 20,
         particleMarkerRadius: 2.4,
         maxParticles: 2048,
