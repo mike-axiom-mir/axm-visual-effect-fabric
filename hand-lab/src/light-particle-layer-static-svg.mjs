@@ -174,12 +174,14 @@ export const realizeLightParticleLayerStaticSvgHand = hand('fx.composition.light
   if (!['line-inspection', 'volumetric-light'].includes(lightPresentationMode)) {
     throw new Error('lightParticleSvg.lightPresentationMode must be line-inspection or volumetric-light');
   }
-  const lightHazeWidthMultiplier = bounded(params.lightHazeWidthMultiplier ?? 7.5, 1, 24, 'lightParticleSvg.lightHazeWidthMultiplier');
-  const lightBeamWidthMultiplier = bounded(params.lightBeamWidthMultiplier ?? 2.8, 1, 12, 'lightParticleSvg.lightBeamWidthMultiplier');
-  const lightHazeBlur = bounded(params.lightHazeBlur ?? 3.8, 0, 32, 'lightParticleSvg.lightHazeBlur');
-  const lightCoreThreshold = bounded(params.lightCoreThreshold ?? 0.58, 0, 0.95, 'lightParticleSvg.lightCoreThreshold');
-  const lightTipOpacity = bounded(params.lightTipOpacity ?? 0.035, 0, 0.5, 'lightParticleSvg.lightTipOpacity');
-  const lightOriginGlowRadius = bounded(params.lightOriginGlowRadius ?? 30, 0, 256, 'lightParticleSvg.lightOriginGlowRadius');
+  const lightHazeWidthMultiplier = bounded(params.lightHazeWidthMultiplier ?? 5, 1, 24, 'lightParticleSvg.lightHazeWidthMultiplier');
+  const lightBeamWidthMultiplier = bounded(params.lightBeamWidthMultiplier ?? 1.8, 1, 12, 'lightParticleSvg.lightBeamWidthMultiplier');
+  const lightHazeBlur = bounded(params.lightHazeBlur ?? 7, 0, 32, 'lightParticleSvg.lightHazeBlur');
+  const lightBeamThreshold = bounded(params.lightBeamThreshold ?? 0.5, 0, 0.95, 'lightParticleSvg.lightBeamThreshold');
+  const lightCoreThreshold = bounded(params.lightCoreThreshold ?? 0.7, 0, 0.95, 'lightParticleSvg.lightCoreThreshold');
+  if (lightCoreThreshold < lightBeamThreshold) throw new Error('lightParticleSvg.lightCoreThreshold must be >= lightParticleSvg.lightBeamThreshold');
+  const lightTipOpacity = bounded(params.lightTipOpacity ?? 0, 0, 0.5, 'lightParticleSvg.lightTipOpacity');
+  const lightOriginGlowRadius = bounded(params.lightOriginGlowRadius ?? 14, 0, 256, 'lightParticleSvg.lightOriginGlowRadius');
   if (lightMaxOpacity < lightMinOpacity) {
     throw new Error('lightParticleSvg.lightMaxOpacity must be >= lightMinOpacity');
   }
@@ -203,6 +205,7 @@ export const realizeLightParticleLayerStaticSvgHand = hand('fx.composition.light
     hazeWidthMultiplier: lightHazeWidthMultiplier,
     beamWidthMultiplier: lightBeamWidthMultiplier,
     hazeBlur: lightHazeBlur,
+    beamThreshold: lightBeamThreshold,
     coreThreshold: lightCoreThreshold,
     tipOpacity: lightTipOpacity,
     originGlowRadius: lightOriginGlowRadius,
@@ -259,6 +262,7 @@ export const realizeLightParticleLayerStaticSvgHand = hand('fx.composition.light
     lightHazeWidthMultiplier,
     lightBeamWidthMultiplier,
     lightHazeBlur,
+    lightBeamThreshold,
     lightCoreThreshold,
     lightTipOpacity,
     lightOriginGlowRadius,
@@ -340,12 +344,13 @@ export const LIGHT_PARTICLE_LAYER_STATIC_SVG_GRAPH = Object.freeze({
         lightMaxOpacity: 0.85,
         lightStrokeColor: '#69d7ff',
         lightPresentationMode: 'volumetric-light',
-        lightHazeWidthMultiplier: 7.5,
-        lightBeamWidthMultiplier: 2.8,
-        lightHazeBlur: 3.8,
-        lightCoreThreshold: 0.58,
-        lightTipOpacity: 0.035,
-        lightOriginGlowRadius: 30,
+        lightHazeWidthMultiplier: 5,
+        lightBeamWidthMultiplier: 1.8,
+        lightHazeBlur: 7,
+        lightBeamThreshold: 0.5,
+        lightCoreThreshold: 0.7,
+        lightTipOpacity: 0,
+        lightOriginGlowRadius: 14,
         particlePadding: 20,
         particleMarkerRadius: 2.4,
         maxParticles: 2048,
