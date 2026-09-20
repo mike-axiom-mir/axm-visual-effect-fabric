@@ -15,6 +15,8 @@ export const TIMING_INTERPOLATIONS = Object.freeze([
   "smoothstep"
 ]);
 
+const KEY_EPSILON = 1e-12;
+
 function finite(value, label) {
   if (!Number.isFinite(value)) throw new Error(label + " must be finite");
 }
@@ -130,15 +132,15 @@ export function validateTimingCurveSet(plan, curveSet) {
 
 function interpolateCurve(curve, progress) {
   const keys = curve.keys;
-  if (progress <= keys[0].t) return keys[0].value;
+  if (progress <= keys[0].t + KEY_EPSILON) return keys[0].value;
   const last = keys[keys.length - 1];
-  if (progress >= last.t) return last.value;
+  if (progress >= last.t - KEY_EPSILON) return last.value;
 
   for (let index = 1; index < keys.length; index += 1) {
     const right = keys[index];
-    if (progress > right.t) continue;
+    if (progress > right.t + KEY_EPSILON) continue;
     const left = keys[index - 1];
-    if (progress === right.t) return right.value;
+    if (Math.abs(progress - right.t) <= KEY_EPSILON) return right.value;
     if (curve.interpolation === "step") return left.value;
     const raw = (progress - left.t) / (right.t - left.t);
     const alpha = curve.interpolation === "smoothstep"
